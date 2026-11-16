@@ -5,148 +5,80 @@ description: Use when creating, editing, or optimizing Tianjin University (TJU /
 
 # TJU Academic Presentation (天津大学课题组学术汇报 PPT) Skill
 
-## Overview
+Build defense-grade academic PowerPoint (`.pptx`) decks on the Tianjin University 16:9 template (`13.333 in × 7.50 in`) using `python-pptx` and `scripts/ppt_builder_helpers.py`.
 
-Build publication- and defense-grade academic PowerPoint (`.pptx`) presentations based on the Tianjin University (天津大学) 16:9 group template using `python-pptx` and OpenXML. Every slide enforces strict typography (`微软雅黑` + `Times New Roman`, $\ge 18\text{ pt}$), a four-color palette, native editable PowerPoint math equations (`<a14:m>`), authentic figures cropped from research papers, and zero-overlap dual-column dashed-box (`sysDot`) layouts verified via headless LibreOffice PDF/PNG rendering.
-
-## When to Use
-
-- Creating or modifying Master's/PhD opening reports (开题汇报), mid-term checks (中期汇报), or thesis defenses (学位答辩) using a `.pptx` template.
-- Converting markdown research reports or literature surveys into dense, visually structured academic slides with boxes, arrows, formulas, and paper figures.
-- Fixing typography, small fonts ($<18\text{ pt}$), uneditable screenshot formulas, or overlapping text/tables in `python-pptx` generated slides.
+## When to Use & Non-Triggers
+- **Use when**: Building or polishing Master's/PhD opening defenses (开题汇报), mid-term checks (中期汇报), or thesis defenses (学位答辩) requiring TJU group visual conventions (`>=18 pt`, 4-color palette, native OMML math, dual-column dashed containers).
+- **Do NOT use when**: Creating general commercial pitch decks, Beamer LaTeX slides (`paper-slides`), conference posters (`paper-poster`), or SVG-first slides (`ppt-master`).
 
 ---
 
-## 1. Non-Negotiable Typography & Color Contract
+## 1. Non-Negotiable Typography, Inline Sub/Sup & Color Contract
 
-### 1.1 Dual-Font Rule (中文微软雅黑 + 英文/数字 Times New Roman)
-Setting `run.font.name` in `python-pptx` only sets the Latin font (`a:latin`) and leaves East Asian characters (`a:ea`) in the theme default. Always set all four OpenXML font slots explicitly on every run:
+### 1.1 Dual-Font 4-Slot Rule & Minimum Size ($\ge 18\text{ pt}$)
+`run.font.name` only sets `a:latin`. Always set all four OpenXML slots (`a:ea="微软雅黑"`, `a:latin="Times New Roman"`, `a:cs="Times New Roman"`, `a:sym="Times New Roman"`, Bold `b="1"`) via `set_run_font()` and run `enforce_min_18pt_all_slides(prs)` before saving:
+- Top banner (`shapes[0]`): `26–28 pt` White (`#FFFFFF`)
+- Slide subtitle: `20–22 pt` Primary Blue (`#00337F`)
+- Column / card headings: `19–20 pt` Primary Blue (`#00337F`)
+- All body text, flow boxes, tables, equation runs, slide numbers, and references: **`18 pt` minimum** (only raster image internals are exempt).
 
-| OpenXML Tag | Script Role | Required Typeface | Weight |
-| :--- | :--- | :--- | :--- |
-| `a:ea` | Chinese / East Asian characters | `微软雅黑` | Bold (`b="1"`) |
-| `a:latin` | English letters & standard numbers | `Times New Roman` | Bold (`b="1"`) |
-| `a:cs` | Complex script / numbers | `Times New Roman` | Bold (`b="1"`) |
-| `a:sym` | Mathematical & special symbols | `Times New Roman` | Bold (`b="1"`) |
+### 1.2 Zero Raw Code Math in Prose & Tables
+- **Never** leave raw ASCII/LaTeX math strings (`M_t^tmp`, `S_{t+1}^obs`, `F_table^truck`, `L_pair`, `ϕ_split`) in body text, headings, or table cells.
+- Pass `_{sub}` and `^{sup}` markup (e.g., `"M_{t}^{tmp}"`, `"S_{t+1}^{obs}"`, `"L_{pair}"`) to `append_rich_text`, `add_text_block`, or `add_solid_box`. It sets OpenXML `baseline="-25000"` / `"30000"` while keeping `sz="1800"` (`>=18 pt` compliant) and leaves code identifiers (`ERR_DST_OCCUPIED`) intact.
 
-### 1.2 Minimum Font Size Rule ($\ge 18\text{ pt}$)
-- **All text across every slide** (body bullets, flowchart boxes, equation symbol definitions, figure captions, table cells, and bibliography entries) **MUST be $\ge 18\text{ pt}$**. Only text embedded inside raster images is exempt.
-- Recommended hierarchy:
-  - Top navigation banner (`shapes[0]`): `26–28 pt` (White, Bold)
-  - Slide subtitle (`shapes[1]`): `20–22 pt` (Primary Blue, Bold)
-  - Column / section headings: `19–20 pt` (Primary Blue, Bold)
-  - Body text, flow boxes, table cells, symbol definitions, references: `18 pt` (Bold)
-- Always run `enforce_min_18pt_all_slides(prs)` before saving to guarantee zero violations.
-
-### 1.3 Strict Four-Color Palette (主色调蓝色)
-Never introduce arbitrary colors (no green, orange, purple, or grey body text). Use only:
-1. **Primary Blue (`#00337F`, `RGBColor(0x00, 0x33, 0x7F)`)**: Top banner, slide subtitles, section headings, primary highlight boxes, arrows, and table headers.
-   - *Light Blue tint (`#EAF1FB`, `RGBColor(0xEA, 0xF1, 0xFB)`)*: Secondary step box fills and alternating table rows.
-2. **Pure Black (`#000000`, `RGBColor(0x00, 0x00, 0x00)`)**: Main body explanations, equation variable definitions, figure captions, and table body text.
-3. **Emphasis Red (`#C00000`, `RGBColor(0xC0, 0x00, 0x00)`)**: Core physical constraints, failure thresholds, quantitative highlights, and final stage (`C`) borders.
-4. **Pure White (`#FFFFFF`, `RGBColor(0xFF, 0xFF, 0xFF)`)**: Slide background and inverted text inside `#00337F` boxes/headers.
+### 1.3 Strict Four-Color Palette
+Allow **only** these five hex values across all shapes, borders, fills, and runs:
+1. **Primary Blue (`#00337F`)** + **Light Blue tint (`#EAF1FB`)** for secondary cards, highlighted equation boxes, and alternating table rows.
+2. **Pure Black (`#000000`)** for body explanations and variable definitions.
+3. **Emphasis Red (`#C00000`)** for physical constraints, failure boundaries, and core takeaways (use sparingly — at most 1–2 focal elements per column).
+4. **Pure White (`#FFFFFF`)** for slide canvas, alternating cards, and inverted text on `#00337F` / `#C00000` headers.
 
 ---
 
-## 2. Slide Geometry, Vertical Offset & Spacing Rules
+## 2. Academic Visual Hierarchy & Anti-"Wall-of-Text" Aesthetics
 
-Standard 16:9 widescreen dimensions: **`13.333 in × 7.50 in`**.
-
-1. **No Bottom "承上启下" Clutter**:
-   - Do **NOT** place red transition sentences (`承上启下：...`) at the bottom of content slides. They compress vertical space and collide with tables or dashed boxes. Express page-to-page logical flow through the slide subtitle (`shapes[1]`) instead.
-2. **Clear Gap Between Subtitle and Body (`0.35–0.40 in`)**:
-   - Top banner (`shapes[0]`): `top = 0.11 in, height = 0.59 in`.
-   - Slide subtitle (`shapes[1]`): Fix at `top = Inches(0.95), height = Inches(0.55)` with `vertical_anchor = MSO_ANCHOR.MIDDLE` (text occupies `y ≈ 1.05..1.38 in`).
-   - Main body (dual-column dashed boxes or tables): Start at **`top = Inches(1.78)` to `Inches(1.90)`** (`height = Inches(5.22)`, spanning `1.78..7.00 in`). Never start dashed boxes at `1.50 in`, which touches the subtitle.
-3. **Breathing Room Between Section Headings and Body Text**:
-   - Inside dashed boxes (`top = 1.78 in`), start the first text block at `top = 1.90 in` (`0.12 in` top padding).
-   - For every blue section heading (`color == C_BLUE` and `size_pt >= 19`), set `p.space_before = Pt(4)` (when `i > 0`) and `p.space_after = Pt(4)` so headings have a visible gap above their body paragraphs.
-   - On single-column template slides, maintain at least `0.52–0.55 in` between a heading shape's `top` and its body paragraph shape's `top`.
-
----
-
-## 3. Three Signature TJU Reference Layouts
-
-### Layout 1: Mechanism + Native Formulas + Architecture Box + Paper Figures (对标参考图1)
-- **Left Dashed Box (`left=0.45, top=1.78, width=6.65, height=5.22`)**:
-  1. Blue heading (`19pt`): Mathematical / constitutive / control model title (`y=1.90`).
-  2. Two native OMML equations (`y=2.34` and `y=2.80`, `height=0.42`).
-  3. Compact 18pt symbol definitions + blue subheading (`y=3.28..4.45`).
-  4. 3-box horizontal flow (`y=4.60..5.45`): `[White/Blue Input Box] → [Dark Blue Core Model Box] → [White/Blue Output Box]`, with an upward arrow `↑` from a full-width `[Red-Bordered Constraint/Safety Box]` (`y=5.78, height=0.62`) + 1-line red takeaway (`y=6.46`).
-- **Right Dashed Box (`left=7.25, top=1.78, width=5.60, height=5.22`)**:
-  1. Blue heading (`19pt`, `y=1.90`).
-  2. One or two real figures cropped from cited papers (`y=2.40, height=2.30`).
-  3. Figure citations (`图 X`) + blue/red engineering advantage summary (`y=4.80..6.85`).
-
-### Layout 2: Layered Perception Pipeline + 3-Step Flow + ICP/Fitting Equations (对标参考图2)
-- **Left Dashed Box (`left=0.45, top=1.78, width=5.65, height=5.22`)**:
-  1. Blue heading + 2-line background challenge (`y=1.90..2.90`).
-  2. Cropped pipeline figure from literature (`y=2.96, width=5.15`).
-  3. Figure caption + blue subheading on baseline error + red conclusion (`y=4.46..6.80`).
-- **Right Dashed Box (`left=6.25, top=1.78, width=6.60, height=5.22`)**:
-  1. Blue heading (`y=1.90`).
-  2. 3 horizontal step boxes connected by right arrows (`y=2.40, height=0.82`).
-  3. 1-line measurement summary + 1-line blue equation intro (`y=3.32..4.08`).
-  4. Two native OMML equations (`y=4.18` and `y=4.68`, `height=0.42`).
-  5. 18pt symbol definitions + red grounding summary (`y=5.20..6.85`).
-
-### Layout 3: Progressive `A → B → C` Ladder + Loss/Reward Modeling (对标参考图3)
-- **Left Dashed Box (`left=0.45, top=1.78, width=6.45, height=5.22`)**:
-  1. Blue heading (`y=1.90`).
-  2. **Box A**: Dark blue header bar (`y=2.38, h=0.42`, white 18pt text `"A  基础..."`) + white body box (`y=2.80, h=0.46`, black 18pt text).
-  3. Down arrow `↓` (`y=3.30`) → **Box B** (`y=3.58, h=0.86`, indented `left=0.82`, blue border: `"B  在 A 基础上引入..."` + 1-line detail).
-  4. Down arrow `↓` (`y=4.48`) → **Box C** (`y=4.76, h=0.86`, indented `left=1.02`, red border: `"C  在 B 基础上开展..."` + 1-line detail).
-  5. Bottom 2-line evaluation/deployment summary (`y=5.74`).
-- **Right Dashed Box (`left=7.05, top=1.78, width=5.80, height=5.22`)**:
-  1. Blue heading (`y=1.90`) + 2 native OMML equations (`y=2.34` and `y=2.80`).
-  2. 18pt variable definitions (`y=3.26`) + paper figure (`y=4.06`) + 1-line figure citation (`y=6.44`).
+1. **Standard Content Header & Slide Number (`setup_tju_content_slide`)**:
+   - Anchor every content subtitle (`top=0.94 in`) with a left `#00337F` vertical bar (`0.08 × 0.36 in`) and a crisp `#00337F` horizontal divider (`y=1.56 in`), leaving `0.22 in` clean white space above `y=1.78 in` dashed boxes (`height=5.22 in`, ending at `7.00 in`).
+   - Always render a bottom-right `#00337F` `18 pt` slide number (`top=7.05 in`, `Slide Number <n>`) on content slides so defense committee members can cite page numbers during Q&A.
+   - **Never** add bottom `"承上启下：..."` text; express page-to-page logic in the subtitle.
+   - **Wrapper Identity Pitfall**: When clearing shapes in `python-pptx`, never compare `sh is banner` (wrappers regenerate per iteration); always compare `sh._element is banner_el`.
+2. **Break Text Monotony with Structured Visual Components**:
+   - Never fill both columns with 6+ plain `•` paragraphs or misaligned `｜` text pipes.
+   - Convert comparisons, state machines, recovery examples, scenario lists, and ablations into structured visual elements:
+     - **3-Box Horizontal Flow**: `[Light-Blue Input] → [Dark-Blue Core] → [Red-Bordered Output/Constraint]` (`ref_layout_1` / `ref_layout_2`).
+     - **Two-Part Joined Cards**: Dark `#00337F` / `#C00000` header bar (`h=0.46 in`) seamlessly touching (`oy=0`) a `#EAF1FB` / `#FFFFFF` body box (`ref_layout_3` / Innovation cards).
+     - **2×4 Card Grids & Badge Tables**: Use `2×4` alternating `#EAF1FB`/`#FFFFFF` cards for 8 scenarios/metrics and compact badge tables (`col0` `#00337F` white ID `A1..A9`) for ablations.
+     - **Colored Lead-Ins**: Use multi-segment runs `[("• 关键机制：", C_BLUE, 18), ("具体工程说明...", C_BLACK, 18)]` and highlight `[R1]` tags in `#00337F` on reference slides.
+3. **Single-Shape Framing (Zero Declared-BBox Overlap)**:
+   - Frame paper/platform figures directly via `pic.line` in `add_image_fit(..., border_color=C_BLUE)` and highlight key formulas directly via `fill_color=C_BLUE_LIGHT, line_color=C_BLUE` on `add_omml_equation()` — never stack a separate background rectangle behind a picture or textbox.
+4. **Grounded Academic Defense Tone**:
+   - Individual thesis defenses must present system module interfaces objectively (never list multi-person team task allocations).
+   - Avoid AI-style meta-disclaimers or bureaucratic scolding (`"口径声明"`, `"严禁预编"`, `"强制冻结...零重做"`, `"独立证伪"`). State assumptions, constraints, and experimental controls directly.
 
 ---
 
-## 4. Native PowerPoint Equations (`<a14:m>`) & StarMath Pitfalls
+## 3. Native OMML Equations (`<a14:m>`) & Rendering Rules
 
-Always insert native editable PowerPoint equations using `add_omml_equation()` (`<a14:m><m:oMathPara><m:oMath>...</m:oMath></m:oMathPara></a14:m>`).
-
-### Critical Pitfalls When Rendering via LibreOffice Impress (StarMath)
-LibreOffice converts OMML `<m:oMath>` through its internal StarMath parser when exporting PDF/PNG. Violating any of the 4 rules below produces a giant red upside-down question mark (`¿`) or `XMLSyntaxError`:
-
-| Pitfall | Cause in OMML / StarMath | Mandatory Fix |
-| :--- | :--- | :--- |
-| **`<` or `>` inside `m_r()`** | Raw `<` or `>` breaks `lxml.etree.fromstring` | Always run `html.escape(text)` inside `m_r(text)` |
-| **Unmatched `(` or `[` across `m_sup()`** | Writing `m_r(" = (") + ... + m_sup(m_r(")"), m_r("T"))` puts `)` inside `{ ")" }^{T}`, leaving `(` unmatched (`¿`) | Keep `(` and `)` at the **exact same nesting level** (e.g., `m_r(" = (0, 0, 1, 1, 1, 1)")`) |
-| **Raw `[` `]` or `\|` inside `<m:t>`** | StarMath parses raw `\|` as boolean `or` and `[` `]` as special grouping syntax | Use parentheses `( ... )` for vectors, `‖` (`\u2016`) for norms, and `e_θ` instead of `\|Δθ\|` |
-| **Subscripts `equiv` or `succ`** | StarMath parses `equiv` (`≡`) and `succ` (`≻`) as binary operators missing operands (`¿`) | Use abbreviated subscripts `L_eqv` (instead of `L_equiv`) and `R_goal` (instead of `R_succ`) |
+1. **Accent Hat Rule (`m_acc`)**: Always use Unicode combining circumflex `U+0302` (`ch="\u0302"`), **never** ASCII `"^"` (`U+005E`), which sinks onto capital letters (`S`, `T`, `D`, `O`) in PowerPoint.
+2. **Upright Operators**: Render `log`, `exp`, `min`, `max`, `∑`, parentheses, and descriptive subscripts (`obs`, `tmp`, `pair`, `avg`) with `italic=False`.
+3. **LibreOffice StarMath Compatibility**: Escape `<`/`>` via `html.escape`, keep `(` and `)` at the same nesting level, use `‖` (`\u2016`) instead of raw `|` or `[` `]` inside `<m:t>`, and avoid reserved StarMath operator names (`equiv`, `succ`) as bare subscripts.
 
 ---
 
-## 5. Character Width Budget & Visual Verification Loop
+## 4. Character Width Budget & Mandatory Visual Verification
 
-### 5.1 Single-Line Character Budget at 18pt
-At `18pt`, each Chinese character is `~0.25 in` wide (and `~0.265 in` when Linux LibreOffice substitutes `微软雅黑` with `Noto Sans CJK`).
-- In a `5.50 in` column, **at most 20–21 Chinese characters fit on a single line**.
-- In a `6.35 in` column, **at most 23–24 Chinese characters fit on a single line**.
-- In a `1.65–1.85 in` flowchart box, **at most 6–7 Chinese characters fit on a single line**.
-- **Rule**: Keep single-line captions, variable definitions, and table cells within these character budgets so they never wrap onto an unexpected extra line and collide with equations or boxes below.
+### 4.1 18 pt Single-Line Budget & Orphan Punctuation Check
+- `5.7–5.8 in` column: **21–22 CJK chars/line**; `2.9 in` grid card: **10–11 CJK chars/line**; `1.75 in` flow box: **6–7 CJK chars/line**.
+- Inspect rendered PNGs to ensure zero orphan punctuation (`，`, `；`, `。`) wrapping alone onto the start of a new line and zero 2-line overflow inside single-line `0.40–0.58 in` bars.
 
-### 5.2 Mandatory Visual Verification Loop
-Never deliver a `.pptx` without rendering and visually inspecting the slide PNGs:
+### 4.2 End-to-End Audit & Render Loop
+1. **Save via Staging File**: Save to a scratch `staged.pptx` first, then `shutil.copy2` to the target `.pptx` inside `try...except PermissionError` so open user PowerPoint windows never block builds.
+2. **OpenXML Audit**: Verify 0 notes, 0 `"承上启下"`, 0 unparsed `_{`/`^{`, all runs `sz >= 1800` + `b="1"` + 4 font slots + `ALLOWED_HEX`, and 0 declared BBox overlaps (`ox > 0.03` and `oy > 0.03`).
+3. **Render & Visually Inspect Every Modified Slide PNG**:
+   - **Windows (PowerPoint COM + PyMuPDF — exact native fidelity)**: Export `staged.pptx` with `win32com.client.DispatchEx("PowerPoint.Application")` (`WithWindow=False`, `SaveAs(..., 32)` to PDF, followed by `deck.Close(); app.Quit(); gc.collect()`), render `144 dpi` PNGs via `pymupdf`, and inspect every modified slide PNG.
+   - **Linux**: `libreoffice --headless --convert-to pdf staged.pptx` + `pdftoppm -png -r 144`.
 
-```bash
-python3 generate_ppt.py
-libreoffice --headless --convert-to pdf output.pptx --outdir ./scratch/
-pdftoppm -png -r 110 ./scratch/output.pdf ./scratch/slide_check
-```
-
-Inspect every rendered `slide_check-*.png` to verify:
-1. Zero text-on-text or text-on-box overlap;
-2. Zero `¿` equation syntax errors;
-3. Clean `0.35–0.40 in` white space between the top blue subtitle and the dashed boxes/tables;
-4. Visible breathing room between blue section headings and black body text.
-
----
-
-## Supporting Files in This Skill
-
-- `scripts/ppt_builder_helpers.py`: Reusable helper library providing `set_run_font`, `update_paragraph_text`, `update_shape_paragraphs`, `update_table_cells`, `clear_slide_body`, `add_dashed_box`, `add_solid_box`, `add_arrow`, `add_text_block`, `add_omml_equation`, `m_r`, `m_sub`, `m_sup`, `m_subsup`, `m_frac`, `m_sqrt`.
-- `examples/generate_tju_opening_ppt.py`: Complete reference script generating a 26-slide Tianjin University opening report PPTX.
-- `references/reference_layouts/`: The 3 canonical Tianjin University slide layout reference images (`ref_layout_1_mechanism_formula.jpg`, `ref_layout_2_perception_icp.jpg`, `ref_layout_3_abc_ladder.jpg`) and base template `tju_template.pptx`.
+## Supporting Files
+- `scripts/ppt_builder_helpers.py`: Reusable OpenXML typography, `_{sub}`/`^{sup}` rich text, OMML equations, framed images, header/footer builder, and `enforce_min_18pt_all_slides`.
+- `examples/generate_tju_opening_ppt.py`: Complete multi-slide opening defense generator example.
+- `references/reference_layouts/`: Canonical TJU reference layouts (`ref_layout_1..3.jpg`) and `tju_template.pptx`.

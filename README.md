@@ -11,16 +11,16 @@
    - 全局字号**不小于 $18\text{ pt}$**（正文/图注/表格/公式注释 $18\text{ pt}$，栏目标题 $19\text{--}20\text{ pt}$，副标题 $21\text{--}22\text{ pt}$，顶部导航标题 $26\text{--}28\text{ pt}$），内置 `enforce_min_18pt_all_slides()` 自动扫描兜底。
 2. **四色学术规范（主色调深蓝）**
    - 仅使用 **深蓝 `#00337F`**（主色调：标题、核心流程框、表头）、**纯黑 `#000000`**（正文、推导与图注）、**纯白 `#FFFFFF`**（背景与反白字）、**强调红 `#C00000`**（核心物理约束、关键判据、C 阶段高亮框），辅以浅蓝填充 `#EAF1FB` 作次级框与斑马纹表格底色。
-3. **PowerPoint 原生可编辑插入公式（`<a14:m>` OMML）**
-   - 杜绝低清公式截图，直接注入 `<a14:m><m:oMathPara><m:oMath>...</m:oMath></m:oMathPara></a14:m>` 原生 PowerPoint 公式对象，并紧跟 $18\text{ pt}$ 符号物理意义注释。
-   - 内置 LibreOffice Impress (`StarMath`) 渲染避坑规则，彻底消除 `¿` 公式解析报错。
-4. **对标课题组三种经典双栏虚线框版式**
-   - **版式 1（机制建模 + 原生公式 + 框图 + 论文实证图）**：`references/reference_layouts/ref_layout_1_mechanism_formula.jpg`
-   - **版式 2（分层感知管线 + 三步流程 + 最小二乘配准公式）**：`references/reference_layouts/ref_layout_2_perception_icp.jpg`
-   - **版式 3（A → B → C 阶梯递进消融框 + 损失/奖励数学建模）**：`references/reference_layouts/ref_layout_3_abc_ladder.jpg`
-5. **版面留白与渲染自检闭环**
-   - 去除底部冗余“承上启下”文字，副标题固定于 `top = 0.95 in`，双栏虚线框/表格整体下移至 `top = 1.78–1.90 in`（留出 $0.35\text{--}0.40\text{ in}$ 清晰留白），小标题与正文之间自动插入段前/段后呼吸间距（`Pt(4)`）。
-   - 强制通过 `libreoffice --headless --convert-to pdf` + `pdftoppm -png` 逐页渲染 PNG 视觉检查，确保零文字重叠、零越界。
+3. **PowerPoint 原生可编辑公式（`<a14:m>` OMML）与行内真实上下标**
+   - 杜绝低清公式截图与正文中裸露的 `M_t^tmp`、`L_pair` 代码下划线：行间公式直接注入 `<a14:m>` 原生对象（重音帽默认使用标准组合符 `U+0302` 避免压字）；正文、卡片与表头支持 `_{sub}` / `^{sup}` 自动转为 OpenXML `baseline` 真实上下标（同时保持 `sz >= 1800` 合规）。
+   - 内置 LibreOffice Impress (`StarMath`) 与原生 PowerPoint 双环境渲染避坑规则，彻底消除 `¿` 公式报错。
+4. **高审美学术版式与反“纯文字墙”规范**
+   - **标准内容页骨架（`setup_tju_content_slide`）**：副标题左侧深蓝竖条锚点 + 顶部分隔细线 + 右下角统一页码，方便答辩评委记录页号。
+   - **对标课题组经典双栏版式与结构化组件**：内置三框横向流程图、连体双层卡片、`2×4` 场景/指标交替网格、深蓝徽标消融表与单形状等比图框（`add_image_fit`），拒绝满屏纯项目符号。
+   - 经典参考图：`ref_layout_1_mechanism_formula.jpg`、`ref_layout_2_perception_icp.jpg`、`ref_layout_3_abc_ladder.jpg`。
+5. **版面留白与双平台渲染自检闭环**
+   - 去除底部冗余“承上启下”文字，副标题与虚线框之间留出清晰呼吸白边，小标题与正文自动插入段前/段后间距。
+   - 支持 **Windows 原生 PowerPoint COM + PyMuPDF**（含暂存文件防锁机制）与 **Linux Headless LibreOffice + pdftoppm** 导出高清 PNG 逐页核验，确保零重叠、零孤立标点换行。
 
 ---
 
