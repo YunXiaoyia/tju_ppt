@@ -22,6 +22,18 @@
    - 去除底部冗余“承上启下”文字，副标题与虚线框之间留出清晰呼吸白边，小标题与正文自动插入段前/段后间距。
    - 支持 **Windows 原生 PowerPoint COM + PyMuPDF**（含暂存文件防锁机制）与 **Linux Headless LibreOffice + pdftoppm** 导出高清 PNG 逐页核验，确保零重叠、零孤立标点换行。
 
+6. **科研流程图 / 技术路线图 / 数据图（自包含，无需安装其他 Skill）**
+   - **原生可编辑**（`tju_native_diagrams.py`）：N 步流程、闭环反馈、分层系统架构、正交连接器，导师可在 PowerPoint 中直接改字。
+   - **复杂示意图引擎**（`tju_svg_diagram.py` · `TjuDiagram`）：Python API / JSON spec / 自动分层布局 → 严格校验（溢出、重叠、连线穿框）→ SVG + 2× PNG，中西文逐段分设字体。
+   - **答辩投影级数据图**（`tju_plot_style.py`）：TJU 四色 + 线型/阴影线区分多组、大字号、按 PPT 放置尺寸作图。
+   - **自动审计**（`tju_audit.py`）：OpenXML 字号/字体槽位/越色/重叠检查 + 自绘图片调色板检查。
+   - 路由规则与自检清单见 `references/diagram_routing.md`，完整演示见 `examples/generate_diagram_showcase.py`。
+
+7. **叙事与内容规范（面向跨方向评委）**
+   - 固定叙事弧：背景/场景 → 特殊性与难点 → 抽象科学问题 → 别人的工作与局限 → 我的工作（先总图）→ 验证方案 → 创新/可行性/计划；副标题连读即故事线。
+   - 术语先定义后使用（降门槛不降格调，禁止口水话/比喻）、单页一个结论、按讲稿时长控制字数（40–60 s 页 ≈ 150–200 字）、每页配图、论断与数字可溯源且推理成立。
+   - `tju_audit.py --content` 自动提示：文字密度、无图内容页、文字溢出估计、绝对化表述、口语化表述、缩写首次出现；详见 `references/narrative_principles.md`。
+
 ---
 
 ## 📂 仓库目录结构
@@ -31,11 +43,19 @@ tju_ppt/
 ├── SKILL.md                                 # Agent Skill 核心指令与避坑规范
 ├── README.md                                # 仓库说明与快速上手指南
 ├── scripts/
-│   └── ppt_builder_helpers.py               # python-pptx + OpenXML 排版与原生公式辅助库
+│   ├── ppt_builder_helpers.py               # python-pptx + OpenXML 排版与原生公式辅助库
+│   ├── tju_native_diagrams.py               # 原生可编辑流程图 / 闭环 / 分层架构 / 连接器
+│   ├── tju_svg_diagram.py                   # TjuDiagram 科研示意图引擎（校验 → SVG/PNG）
+│   ├── tju_plot_style.py                    # Matplotlib 答辩投影样式
+│   └── tju_audit.py                         # OpenXML 审计 + 图片调色板审计
 ├── examples/
-│   └── generate_tju_opening_ppt.py          # 26 页硕士开题汇报 PPT 完整生成示例脚本
+│   ├── generate_tju_opening_ppt.py          # 开题汇报 PPT 生成示例脚本
+│   └── generate_diagram_showcase.py         # 四类绘图路线演示 + 自动审计
 └── references/
     ├── tju_template.pptx                    # 天津大学课题组 16:9 标准控制模板
+    ├── diagram_routing.md                   # 绘图路由、已知限制与视觉自检清单
+    ├── narrative_principles.md              # 叙事弧、术语、密度、论断规范与开题完整性清单
+    ├── tju_mermaid_theme.json               # 可选：Mermaid TJU 主题
     └── reference_layouts/                   # 三张标准双栏排版参考图
         ├── ref_layout_1_mechanism_formula.jpg
         ├── ref_layout_2_perception_icp.jpg
@@ -55,6 +75,8 @@ git clone https://github.com/YunXiaoyia/tju_ppt.git ~/.gemini/config/skills/tju-
 # Claude Code / Codex / 通用 Agent Skills 目录
 git clone https://github.com/YunXiaoyia/tju_ppt.git ~/.agents/skills/tju-ppt
 ```
+
+依赖：`pip install python-pptx pillow numpy lxml`；绘制复杂示意图另需 `cairosvg`，数据图需 `matplotlib`（建议 >= 3.6，以便同一标签内中西文分设字体）。
 
 ---
 
