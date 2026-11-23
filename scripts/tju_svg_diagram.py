@@ -264,7 +264,7 @@ class TjuDiagram:
     # ---------------- 元素 ----------------
     def node(self, nid, x, y, w, h, text, role="plain", pt=None, align="center", wrap=True, dashed=False,
              check=True):
-        """check=False：示意性图元（如夹臂、偏移棉包）允许与其他节点重叠，不参与重叠/穿框校验。"""
+        """check=False：示意性图元（如机械臂示意、偏移轮廓）允许与其他节点重叠，不参与重叠/穿框校验。"""
         if nid in self.nodes:
             raise ValueError(f"duplicate node id {nid!r}")
         if role not in ROLES:
@@ -368,10 +368,11 @@ class TjuDiagram:
     def from_spec(cls, spec):
         """
         JSON IR → 图。spec 字段：
-          width, height (in), base_pt?,
-          nodes: [{id, x, y, w, h, text, role?, pt?}],
-          groups?: [{x, y, w, h, label?, color?, dashed?}],
-          edges?: [{from, to, label?, route?, via?, color?, dashed?, both?, src_side?, dst_side?}],
+          width, height (in), base_pt?, line_spacing?,
+          nodes: [{id, x, y, w, h, text, role?, pt?, align?, wrap?, dashed?, check?}],
+          groups?: [{x, y, w, h, label?, color?, dashed?, pt?}],
+          edges?: [{from, to, label?, route?, via?, color?, dashed?, both?, src_side?, dst_side?, label_pos?, label_offset?}],
+          arrows?: [{points: [[x, y], ...], color?, dashed?, width?, both?}],
           texts?: [{x, y, content, pt?, color?, anchor?}]
         也可用 {"layout": "layered", "direction": "LR", "ranks": [...], "edges": [...]} 自动布局。
         """
@@ -383,16 +384,28 @@ class TjuDiagram:
                      for r in spec["ranks"]]
             edges = [dict(src=e["from"], dst=e["to"], **{k: v for k, v in e.items() if k not in ("from", "to")})
                      for e in spec.get("edges", [])]
-            return cls.layered(spec["width"], spec["height"], ranks, direction=spec.get("direction", "LR"),
-                               edges=edges, base_pt=spec.get("base_pt", 18))
-        d = cls(spec["width"], spec["height"], base_pt=spec.get("base_pt", 18))
+            d = cls.layered(spec["width"], spec["height"], ranks, direction=spec.get("direction", "LR"),
+                            edges=edges, base_pt=spec.get("base_pt", 18),
+                            line_spacing=spec.get("line_spacing", 1.18))
+        else:
+            d = cls(spec["width"], spec["height"], base_pt=spec.get("base_pt", 18),
+                    line_spacing=spec.get("line_spacing", 1.18))
+            for n in spec["nodes"]:
+                d.node(
+                    n["id"], n["x"], n["y"], n["w"], n["h"], n["text"],
+                    role=n.get("role", "plain"), pt=n.get("pt"),
+                    align=n.get("align", "center"), wrap=n.get("wrap", True),
+                    dashed=n.get("dashed", False), check=n.get("check", True),
+                )
+            for e in spec.get("edges", []):
+                kw = {k: v for k, v in e.items() if k not in ("from", "to")}
+                d.edge(e["from"], e["to"], **kw)
         for g in spec.get("groups", []):
-            d.group(g["x"], g["y"], g["w"], g["h"], g.get("label"), g.get("color", "blue"), g.get("dashed", True))
-        for n in spec["nodes"]:
-            d.node(n["id"], n["x"], n["y"], n["w"], n["h"], n["text"], n.get("role", "plain"), n.get("pt"))
-        for e in spec.get("edges", []):
-            kw = {k: v for k, v in e.items() if k not in ("from", "to")}
-            d.edge(e["from"], e["to"], **kw)
+            d.group(g["x"], g["y"], g["w"], g["h"], g.get("label"), g.get("color", "blue"),
+                    g.get("dashed", True), g.get("pt"))
+        for a in spec.get("arrows", []):
+            d.arrow(a["points"], color=a.get("color", "blue"), dashed=a.get("dashed", False),
+                    width=a.get("width", 2.4), both=a.get("both", False))
         for t in spec.get("texts", []):
             d.text(t["x"], t["y"], t["content"], t.get("pt"), t.get("color", "black"), t.get("anchor", "start"))
         return d
@@ -548,6 +561,10 @@ class TjuDiagram:
             if e["src"] not in self.nodes or e["dst"] not in self.nodes:
                 continue
             pts = self._route(e)
+            for pt_xy in pts:
+                if pt_xy[0] < -0.5 or pt_xy[1] < -0.5 or pt_xy[0] > self.W + 0.5 or pt_xy[1] > self.H + 0.5:
+                    issues.append(f"out of canvas: edge {e['src']}->{e['dst']} waypoint")
+                    break
             for p, q in zip(pts[:-1], pts[1:]):
                 for nid, n in self.nodes.items():
                     if nid in (e["src"], e["dst"]) or not n["check"]:
@@ -566,20 +583,33 @@ class TjuDiagram:
                     issues.append(f"edge label {e['label']!r} out of canvas")
                 label_boxes.append(lb)
         for a in self.arrows:
+            if len(a["pts"]) < 2:
+                issues.append("free arrow needs at least 2 points")
+                continue
+            for pt_xy in a["pts"]:
+                if pt_xy[0] < -0.5 or pt_xy[1] < -0.5 or pt_xy[0] > self.W + 0.5 or pt_xy[1] > self.H + 0.5:
+                    issues.append("out of canvas: free arrow")
+                    break
             for p, q in zip(a["pts"][:-1], a["pts"][1:]):
                 for nid, n in self.nodes.items():
                     if n["check"] and _seg_hits_rect(p, q, (n["x"], n["y"], n["w"], n["h"])):
                         issues.append(f"free arrow passes through node {nid!r}")
         for t in self.texts:
-            tw = line_width_px(t["content"], t["px"])
-            x0 = t["x"] - (tw / 2 if t["anchor"] == "middle" else tw if t["anchor"] == "end" else 0)
-            if x0 < -0.5 or x0 + tw > self.W + 0.5 or t["y"] - t["px"] < -0.5 or t["y"] > self.H + 0.5:
-                issues.append(f"text {t['content']!r} out of canvas")
-            tb = (x0, t["y"] - t["px"] * 0.9, tw, t["px"] * 1.1)
-            for nid, n in self.nodes.items():
-                if _rect_overlap(tb, (n["x"], n["y"], n["w"], n["h"]), tol=1.0):
-                    issues.append(f"text {t['content']!r} overlaps node {nid!r}")
+            lines = str(t["content"]).split("\n")
+            lh = t["px"] * self.line_spacing
+            for li, ln in enumerate(lines):
+                tw = line_width_px(ln, t["px"])
+                x0 = t["x"] - (tw / 2 if t["anchor"] == "middle" else tw if t["anchor"] == "end" else 0)
+                y_line = t["y"] + li * lh
+                if x0 < -0.5 or x0 + tw > self.W + 0.5 or y_line - t["px"] < -0.5 or y_line > self.H + 0.5:
+                    issues.append(f"text {t['content']!r} out of canvas")
+                tb = (x0, y_line - t["px"] * 0.9, tw, t["px"] * 1.1)
+                for nid, n in self.nodes.items():
+                    if _rect_overlap(tb, (n["x"], n["y"], n["w"], n["h"]), tol=1.0):
+                        issues.append(f"text {t['content']!r} overlaps node {nid!r}")
         for g in self.groups:
+            if g["x"] < -0.5 or g["y"] < -0.5 or g["x"] + g["w"] > self.W + 0.5 or g["y"] + g["h"] > self.H + 0.5:
+                issues.append(f"out of canvas: group {g['label']!r}")
             if g["label"]:
                 lw = line_width_px(g["label"], g["px"]) + 0.16 * PPI
                 if lw > g["w"]:
@@ -660,10 +690,16 @@ class TjuDiagram:
                 o.append(self._text_svg(lb[0] + lb[2] / 2, lb[1] + lb[3] * 0.80, e["label"], self.base_px, e["color"]))
         for a in self.arrows:
             pts = a["pts"]
+            if len(pts) < 2:
+                continue
             body = list(pts)
             p, q = body[-2], body[-1]
             L = math.hypot(q[0] - p[0], q[1] - p[1]) or 1
             body[-1] = (q[0] - (q[0] - p[0]) / L * 8, q[1] - (q[1] - p[1]) / L * 8)
+            if a["both"]:
+                p0, p1 = body[0], body[1]
+                L0 = math.hypot(p1[0] - p0[0], p1[1] - p0[1]) or 1
+                body[0] = (p0[0] + (p1[0] - p0[0]) / L0 * 8, p0[1] + (p1[1] - p0[1]) / L0 * 8)
             dash = ' stroke-dasharray="8,5"' if a["dashed"] else ""
             o.append(f'<polyline points="{" ".join(f"{x:.2f},{y:.2f}" for x, y in body)}" fill="none" '
                      f'stroke="{a["color"]}" stroke-width="{a["width"]}"{dash}/>')
@@ -688,7 +724,10 @@ class TjuDiagram:
                 else:
                     o.append(self._text_svg(n["x"] + n["w"] / 2, y0 + i * lh, ln, n["px"], tcol))
         for t in self.texts:
-            o.append(self._text_svg(t["x"], t["y"], t["content"], t["px"], t["color"], anchor=t["anchor"]))
+            lines = str(t["content"]).split("\n")
+            lh = t["px"] * self.line_spacing
+            for li, ln in enumerate(lines):
+                o.append(self._text_svg(t["x"], t["y"] + li * lh, ln, t["px"], t["color"], anchor=t["anchor"]))
         o.append("</svg>")
         return "\n".join(o)
 

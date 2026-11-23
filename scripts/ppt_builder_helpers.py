@@ -6,13 +6,16 @@ TJU-PPT 可复用学术汇报排版辅助库 (ppt_builder_helpers.py)
 核心职责（将机械性约束自动化）：
 1. 字体四槽位强绑定：中文 微软雅黑 (a:ea)，英文/数字/符号 Times New Roman (a:latin, a:cs, a:sym)，粗体，>=18pt。
 2. 严格四色规范：#00337F（天大深蓝）、#EAF1FB（浅蓝填充）、#C00000（强调红）、#000000（纯黑）、#FFFFFF（反白）。
-3. 行内上下标真实排版：解析 _{sub} 与 ^{sup} 生成 OpenXML baseline (-25000 / 30000)，保持 sz>=1800 合规，杜绝裸露代码下划线。
+3. 行内上下标真实排版：解析 _{sub} 与 ^{sup} 生成 OpenXML baseline (-25000 / 30000)，保持 sz>=1800 合规，避免裸露代码下划线。
 4. 原生可编辑 OMML 公式 (<a14:m>)：重音帽默认使用组合符 U+0302 防止压字，支持单形状浅蓝高亮公式框。
-5. 内容页标准天际线与页码：左侧深蓝竖条锚点 + 副标题 + 顶部分隔细线 + 右下角页码，规避 python-pptx 包装器比较陷阱。
+5. 标准骨架与结构化组件：内容页骨架（含清除 mc:AlternateContent 残留）、封面/目录/致谢页、连体卡片、四色表格、安全重排页与暂存写回。
 """
 
 import html
+import os
 import re
+import shutil
+import tempfile
 from PIL import Image
 from lxml import etree
 from pptx.util import Inches, Pt
@@ -30,6 +33,38 @@ C_WHITE = RGBColor(0xFF, 0xFF, 0xFF)       # 反白文字与纯白底
 ALLOWED_HEX = {"00337F", "EAF1FB", "C00000", "000000", "FFFFFF"}
 
 SUB_SUP_PATTERN = re.compile(r"(\_\{[^{}]+\}|\^\{[^{}]+\})")
+
+_FONT_SLOTS = (
+    ("a:latin", "Times New Roman"),
+    ("a:ea", "微软雅黑"),
+    ("a:cs", "Times New Roman"),
+    ("a:sym", "Times New Roman"),
+)
+
+
+def _ensure_four_font_slots(rPr):
+    for tag, typeface in _FONT_SLOTS:
+        el = rPr.find(qn(tag))
+        if el is None:
+            el = etree.SubElement(rPr, qn(tag))
+        el.set("typeface", typeface)
+
+
+def _remove_alternate_content(slide):
+    """清除 spTree 中残留的 mc:AlternateContent（PowerPoint 二次保存 OMML 后产生的包装节点）。"""
+    spTree = slide.shapes._spTree
+    for child in list(spTree):
+        if child.tag.endswith("AlternateContent"):
+            spTree.remove(child)
+
+
+def _in_mc_fallback(el):
+    cur = el.getparent()
+    while cur is not None:
+        if cur.tag.endswith("}Fallback"):
+            return True
+        cur = cur.getparent()
+    return False
 
 
 def set_run_font(run, size_pt=18, bold=True, color=C_BLACK, italic=False, baseline=None):
@@ -52,16 +87,7 @@ def set_run_font(run, size_pt=18, bold=True, color=C_BLACK, italic=False, baseli
         rPr.set("baseline", str(baseline))
     elif "baseline" in rPr.attrib:
         del rPr.attrib["baseline"]
-    for tag, typeface in [
-        ("a:latin", "Times New Roman"),
-        ("a:ea", "微软雅黑"),
-        ("a:cs", "Times New Roman"),
-        ("a:sym", "Times New Roman"),
-    ]:
-        el = rPr.find(qn(tag))
-        if el is None:
-            el = etree.SubElement(rPr, qn(tag))
-        el.set("typeface", typeface)
+    _ensure_four_font_slots(rPr)
 
 
 def append_rich_text(paragraph, text, size_pt=18, color=C_BLACK, bold=True):
@@ -87,8 +113,9 @@ def update_paragraph_text(paragraph, new_text, size_pt=18, bold=True, color=None
         paragraph.alignment = align
     orig_pt = paragraph.runs[0].font.size.pt if (len(paragraph.runs) > 0 and paragraph.runs[0].font.size) else size_pt
     final_pt = max(18, size_pt if size_pt else orig_pt)
-    for r in list(paragraph.runs):
-        paragraph._p.remove(r._r)
+    for child in list(paragraph._p):
+        if not child.tag.endswith("pPr"):
+            paragraph._p.remove(child)
     append_rich_text(paragraph, new_text, size_pt=final_pt, color=color or C_BLACK, bold=bold)
 
 
@@ -120,28 +147,45 @@ def update_table_cells(table, cell_data, header_pt=19, body_pt=18):
 
 
 def clear_slide_body(slide):
-    """保留顶部标题栏(shapes[0])与副标题(shapes[1])，按底层 XML 元素引用清除其余旧形状"""
+    """保留顶部标题栏(shapes[0])与副标题(shapes[1])，按底层 XML 元素引用清除其余旧形状及残留 AlternateContent"""
+    _remove_alternate_content(slide)
     keep_els = {sh._element for sh in list(slide.shapes)[:2]}
     for sp in list(slide.shapes):
         if sp._element not in keep_els:
             sp._element.getparent().remove(sp._element)
 
 
-def setup_tju_content_slide(slide, banner_title, subtitle_text, page_num=None):
-    """构建标准天大学术内容页骨架：保留顶部蓝条标题 + 副标题左侧竖条锚点 + 顶部分隔细线 + 右下角页码"""
+def setup_tju_content_slide(slide, banner_title, subtitle_text, page_num=None, subtitle_pt=20, banner_pt=28):
+    """构建标准天大学术内容页骨架：顶部蓝条标题 + 副标题左侧竖条锚点 + 顶部分隔细线 + 右下角页码。
+    自动清理 mc:AlternateContent 残留，并在空白版式（0 形状）上自动创建标题文本框。"""
     if slide.has_notes_slide:
         slide.notes_slide.notes_text_frame.text = ""
+    _remove_alternate_content(slide)
+
     banner = None
     for sh in slide.shapes:
-        if sh.top.inches < 0.6 and sh.left.inches > 0.6:
+        if sh.has_text_frame and sh.top.inches < 0.6 and sh.left.inches > 0.6:
             banner = sh
             break
     if banner is None:
-        banner = slide.shapes[0]
-    banner_el = banner._element
-    for sh in list(slide.shapes):
-        if sh._element is not banner_el:
+        for sh in slide.shapes:
+            if sh.has_text_frame and sh.top.inches < 0.6:
+                banner = sh
+                break
+    if banner is None:
+        for sh in slide.shapes:
+            if sh.has_text_frame:
+                banner = sh
+                break
+    if banner is None:
+        for sh in list(slide.shapes):
             sh._element.getparent().remove(sh._element)
+        banner = slide.shapes.add_textbox(Inches(0.92), Inches(0.11), Inches(11.50), Inches(0.59))
+    else:
+        banner_el = banner._element
+        for sh in list(slide.shapes):
+            if sh._element is not banner_el:
+                sh._element.getparent().remove(sh._element)
 
     banner.left, banner.top = Inches(0.92), Inches(0.11)
     banner.width, banner.height = Inches(11.50), Inches(0.59)
@@ -152,11 +196,12 @@ def setup_tju_content_slide(slide, banner_title, subtitle_text, page_num=None):
         tf._txBody.remove(tf.paragraphs[-1]._p)
     p = tf.paragraphs[0]
     p.alignment = PP_ALIGN.LEFT
-    for r in list(p.runs):
-        p._p.remove(r._r)
+    for child in list(p._p):
+        if not child.tag.endswith("pPr"):
+            p._p.remove(child)
     r = p.add_run()
     r.text = banner_title
-    set_run_font(r, size_pt=28, bold=True, color=C_WHITE)
+    set_run_font(r, size_pt=max(18, banner_pt), bold=True, color=C_WHITE)
 
     bar = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.45), Inches(1.04), Inches(0.08), Inches(0.36))
     bar.fill.solid()
@@ -169,7 +214,7 @@ def setup_tju_content_slide(slide, banner_title, subtitle_text, page_num=None):
     stf.vertical_anchor = MSO_ANCHOR.MIDDLE
     sp = stf.paragraphs[0]
     sp.alignment = PP_ALIGN.LEFT
-    append_rich_text(sp, subtitle_text, size_pt=20, color=C_BLUE, bold=True)
+    append_rich_text(sp, subtitle_text, size_pt=max(18, subtitle_pt), color=C_BLUE, bold=True)
 
     rule = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.45), Inches(1.56), Inches(12.43), Inches(0.02))
     rule.fill.solid()
@@ -189,6 +234,180 @@ def setup_tju_content_slide(slide, banner_title, subtitle_text, page_num=None):
         set_run_font(pr, size_pt=18, bold=True, color=C_BLUE)
 
     return banner, sub
+
+
+def format_cover_slide(slide, title_lines, meta_lines, title_pt=36, meta_pt=22, text_color=C_WHITE):
+    """格式化天大标准封面页（标题幻灯片版式，深蓝背景配纯白粗体字）。"""
+    if slide.has_notes_slide:
+        slide.notes_slide.notes_text_frame.text = ""
+    _remove_alternate_content(slide)
+    if isinstance(title_lines, str):
+        title_lines = title_lines.split("\n")
+    if isinstance(meta_lines, str):
+        meta_lines = meta_lines.split("\n")
+
+    text_shapes = sorted([sh for sh in slide.shapes if sh.has_text_frame], key=lambda s: s.top)
+    title_sh = next((s for s in text_shapes if s.top.inches < 3.0), None)
+    meta_sh = next((s for s in text_shapes if s is not title_sh and 3.0 <= s.top.inches < 6.5), None)
+    if title_sh is None:
+        title_sh = slide.shapes.add_textbox(Inches(0.91), Inches(1.23), Inches(11.50), Inches(2.20))
+    if meta_sh is None:
+        meta_sh = slide.shapes.add_textbox(Inches(1.71), Inches(3.94), Inches(9.90), Inches(1.40))
+
+    keep = {title_sh._element, meta_sh._element}
+    for sh in list(slide.shapes):
+        if sh._element not in keep:
+            sh._element.getparent().remove(sh._element)
+
+    for sh, lines, pt in ((title_sh, title_lines, title_pt), (meta_sh, meta_lines, meta_pt)):
+        tf = sh.text_frame
+        tf.word_wrap = True
+        tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+        while len(tf.paragraphs) > len(lines):
+            tf._txBody.remove(tf.paragraphs[-1]._p)
+        for idx, line in enumerate(lines):
+            p = tf.paragraphs[idx] if idx < len(tf.paragraphs) else tf.add_paragraph()
+            update_paragraph_text(p, line, size_pt=max(18, pt), bold=True, color=text_color, align=PP_ALIGN.CENTER)
+    return title_sh, meta_sh
+
+
+def format_toc_slide(slide, toc_items, active_idx=0, page_num=None):
+    """格式化天大标准目录/章节过渡页（1_仅标题版式）：当前章节红字高亮，其余深蓝，消除 a:fld 重复页码。"""
+    if slide.has_notes_slide:
+        slide.notes_slide.notes_text_frame.text = ""
+    _remove_alternate_content(slide)
+
+    toc_sh, pg_sh = None, None
+    for sh in slide.shapes:
+        if not sh.has_text_frame:
+            continue
+        if "Placeholder" in sh.name or sh.top.inches > 6.5:
+            pg_sh = sh
+        elif toc_sh is None:
+            toc_sh = sh
+
+    if toc_sh is None:
+        toc_sh = slide.shapes.add_textbox(Inches(4.80), Inches(2.22), Inches(6.80), Inches(4.60))
+    else:
+        toc_sh.left, toc_sh.top, toc_sh.width, toc_sh.height = Inches(4.80), Inches(2.22), Inches(6.80), Inches(4.60)
+
+    keep = {toc_sh._element}
+    if pg_sh is not None and page_num is not None:
+        keep.add(pg_sh._element)
+    for sh in list(slide.shapes):
+        if sh._element not in keep:
+            sh._element.getparent().remove(sh._element)
+
+    tf = toc_sh.text_frame
+    tf.word_wrap = True
+    n = len(toc_items)
+    while len(tf.paragraphs) < n:
+        tf.add_paragraph()
+    while len(tf.paragraphs) > n:
+        tf._txBody.remove(tf.paragraphs[-1]._p)
+    for idx, title in enumerate(toc_items):
+        p = tf.paragraphs[idx]
+        p.alignment = PP_ALIGN.LEFT
+        p.space_after = Pt(18)
+        for child in list(p._p):
+            if not child.tag.endswith("pPr"):
+                p._p.remove(child)
+        is_act = (idx == active_idx)
+        prefix = "▸ " if is_act else "   "
+        r = p.add_run()
+        r.text = prefix + title
+        set_run_font(r, size_pt=28 if is_act else 25, bold=True, color=C_RED if is_act else C_BLUE)
+
+    if page_num is not None:
+        if pg_sh is None:
+            pg_sh = slide.shapes.add_textbox(Inches(12.35), Inches(7.05), Inches(0.75), Inches(0.36))
+        else:
+            pg_sh.left, pg_sh.top, pg_sh.width, pg_sh.height = Inches(12.35), Inches(7.05), Inches(0.75), Inches(0.36)
+        pg_sh.name = f"Slide Number {page_num}"
+        ptf = pg_sh.text_frame
+        ptf.word_wrap = False
+        ptf.vertical_anchor = MSO_ANCHOR.MIDDLE
+        while len(ptf.paragraphs) > 1:
+            ptf._txBody.remove(ptf.paragraphs[-1]._p)
+        pp = ptf.paragraphs[0]
+        pp.alignment = PP_ALIGN.RIGHT
+        for child in list(pp._p):
+            if not child.tag.endswith("pPr"):
+                pp._p.remove(child)
+        pr = pp.add_run()
+        pr.text = str(page_num)
+        set_run_font(pr, size_pt=18, bold=True, color=C_BLUE)
+
+    return toc_sh
+
+
+def format_thanks_slide(slide, lines=("恳请各位老师批评指正", "谢谢！"), size_pt=40, text_color=C_WHITE):
+    """格式化天大标准致谢页（标题幻灯片版式）。"""
+    if slide.has_notes_slide:
+        slide.notes_slide.notes_text_frame.text = ""
+    _remove_alternate_content(slide)
+    if isinstance(lines, str):
+        lines = lines.split("\n")
+
+    main_sh = next((sh for sh in slide.shapes if sh.has_text_frame), None)
+    if main_sh is None:
+        main_sh = slide.shapes.add_textbox(Inches(1.71), Inches(2.20), Inches(9.90), Inches(2.60))
+    keep = {main_sh._element}
+    for sh in list(slide.shapes):
+        if sh._element not in keep:
+            sh._element.getparent().remove(sh._element)
+
+    tf = main_sh.text_frame
+    tf.word_wrap = True
+    tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+    while len(tf.paragraphs) > len(lines):
+        tf._txBody.remove(tf.paragraphs[-1]._p)
+    for idx, line in enumerate(lines):
+        p = tf.paragraphs[idx] if idx < len(tf.paragraphs) else tf.add_paragraph()
+        update_paragraph_text(p, line, size_pt=max(18, size_pt), bold=True, color=text_color, align=PP_ALIGN.CENTER)
+    return main_sh
+
+
+def rearrange_slides(prs, src_indices_0based):
+    """按 0-based 索引列表重排并裁剪模板页，同时安全释放被删除页的 rId 关系。"""
+    sldIdLst = prs.slides._sldIdLst
+    orig_elems = list(sldIdLst)
+    keep_set = set(src_indices_0based)
+    if len(keep_set) != len(src_indices_0based):
+        raise ValueError("src_indices_0based must not contain duplicate indices")
+
+    for i, el in enumerate(orig_elems):
+        if i not in keep_set:
+            rId = el.get(qn("r:id"))
+            sldIdLst.remove(el)
+            if rId:
+                prs.part.drop_rel(rId)
+
+    ordered = [orig_elems[i] for i in src_indices_0based]
+    for el in list(sldIdLst):
+        sldIdLst.remove(el)
+    for el in ordered:
+        sldIdLst.append(el)
+
+
+def save_staged_pptx(prs, target_path, staged_path=None, fallback_suffix="_staged"):
+    """先写入暂存文件再 copy2 到目标路径，避免目标 PPTX 正被 PowerPoint 打开时直接报错中断。"""
+    target_abs = os.path.abspath(target_path)
+    os.makedirs(os.path.dirname(target_abs), exist_ok=True)
+    if staged_path is None:
+        fd, staged_path = tempfile.mkstemp(prefix="tju_ppt_", suffix=".pptx")
+        os.close(fd)
+    else:
+        os.makedirs(os.path.dirname(os.path.abspath(staged_path)), exist_ok=True)
+    prs.save(staged_path)
+    try:
+        shutil.copy2(staged_path, target_abs)
+        return target_abs
+    except PermissionError:
+        stem, ext = os.path.splitext(target_abs)
+        alt_path = f"{stem}{fallback_suffix}{ext}"
+        shutil.copy2(staged_path, alt_path)
+        return alt_path
 
 
 def add_dashed_box(slide, left, top, width, height, line_color=C_BLACK, weight_pt=1.5):
@@ -243,6 +462,98 @@ def add_solid_box(
         else:
             append_rich_text(p, item, size_pt=max(18, size_pt), color=text_color, bold=True)
     return sp
+
+
+def add_joined_card(
+    slide, left, top, width, header_h, body_h,
+    header_text, body_lines,
+    header_bg=C_BLUE, body_bg=C_BLUE_LIGHT, border_color=C_BLUE,
+    header_pt=19, body_pt=18, align=PP_ALIGN.LEFT,
+):
+    """添加两段连体卡片（深色标题条与正文框无缝相接，零声明重叠）。"""
+    hdr = add_solid_box(
+        slide, left, top, width, header_h, [header_text],
+        fill_color=header_bg, line_color=border_color, text_color=C_WHITE,
+        size_pt=header_pt, align=PP_ALIGN.LEFT, margin_lr=0.10, margin_tb=0.03,
+    )
+    body = add_solid_box(
+        slide, left, top + header_h, width, body_h, body_lines,
+        fill_color=body_bg, line_color=border_color, text_color=C_BLACK,
+        size_pt=body_pt, align=align, margin_lr=0.10, margin_tb=0.05,
+    )
+    return hdr, body
+
+
+def _set_cell_borders(cell, hex_color="00337F", width_pt=0.75):
+    """显式写入四色边框，避免 PowerPoint 默认表格样式引入主题色 schemeClr。"""
+    tcPr = cell._tc.get_or_add_tcPr()
+    w_emu = str(int(round(width_pt * 12700)))
+    for tag in ("a:lnL", "a:lnR", "a:lnT", "a:lnB"):
+        old = tcPr.find(qn(tag))
+        if old is not None:
+            tcPr.remove(old)
+        ln = etree.SubElement(tcPr, qn(tag), w=w_emu, cap="flat", cmpd="sng", algn="ctr")
+        sf = etree.SubElement(ln, qn("a:solidFill"))
+        etree.SubElement(sf, qn("a:srgbClr"), val=hex_color)
+
+
+def add_clean_tju_table(
+    slide, left, top, width, height, col_widths, rows_data,
+    col_aligns=None, header_pt=19, body_pt=18, badge_col0=False,
+):
+    """构建严格四色合规表格（蓝底白字表头 + 浅蓝/纯白交替行；可选首列深蓝徽标）。"""
+    n_rows = len(rows_data)
+    n_cols = len(rows_data[0])
+    shape = slide.shapes.add_table(n_rows, n_cols, Inches(left), Inches(top), Inches(width), Inches(height))
+    tbl = shape.table
+    # 关闭默认表格主题样式引用，防止引入非四色 schemeClr
+    tblPr = tbl._tbl.tblPr
+    for child in list(tblPr):
+        if child.tag.endswith("tableStyleId"):
+            tblPr.remove(child)
+    for ci, cw in enumerate(col_widths):
+        tbl.columns[ci].width = Inches(cw)
+
+    row_h = height / n_rows
+    for ri, row in enumerate(rows_data):
+        tbl.rows[ri].height = Inches(row_h)
+        is_hdr = (ri == 0)
+        for ci, val in enumerate(row):
+            is_badge = badge_col0 and (not is_hdr) and (ci == 0)
+            bg = C_BLUE if (is_hdr or is_badge) else (C_BLUE_LIGHT if ri % 2 == 1 else C_WHITE)
+            fg = C_WHITE if (is_hdr or is_badge) else C_BLACK
+            pt = max(18, header_pt if is_hdr else body_pt)
+            cell = tbl.cell(ri, ci)
+            cell.fill.solid()
+            cell.fill.fore_color.rgb = bg
+            _set_cell_borders(cell, hex_color="FFFFFF" if is_hdr else "00337F", width_pt=0.75)
+            cell.vertical_anchor = MSO_ANCHOR.MIDDLE
+            cell.margin_left = Inches(0.08)
+            cell.margin_right = Inches(0.08)
+            cell.margin_top = Inches(0.04)
+            cell.margin_bottom = Inches(0.04)
+            tf = cell.text_frame
+            tf.word_wrap = True
+            while len(tf.paragraphs) > 1:
+                tf._txBody.remove(tf.paragraphs[-1]._p)
+            p = tf.paragraphs[0]
+            if is_hdr or is_badge:
+                p.alignment = PP_ALIGN.CENTER
+            elif col_aligns and ci < len(col_aligns):
+                p.alignment = col_aligns[ci]
+            else:
+                p.alignment = PP_ALIGN.CENTER if ci == 0 else PP_ALIGN.LEFT
+            for child in list(p._p):
+                if not child.tag.endswith("pPr"):
+                    p._p.remove(child)
+            if isinstance(val, list):
+                for seg in val:
+                    seg_txt, seg_col = seg[0], seg[1]
+                    seg_pt = max(18, seg[2]) if len(seg) >= 3 else pt
+                    append_rich_text(p, seg_txt, size_pt=seg_pt, color=seg_col, bold=True)
+            else:
+                append_rich_text(p, str(val), size_pt=pt, color=fg, bold=True)
+    return shape
 
 
 def add_arrow(slide, left, top, width, height, direction="right", color=C_BLUE):
@@ -406,27 +717,11 @@ def enforce_min_18pt_all_slides(prs):
             if sh.has_text_frame:
                 for p in sh.text_frame.paragraphs:
                     for r in p.runs:
-                        sz = int(r.font.size.pt) if r.font.size else 18
-                        if sz < 18:
+                        if r.font.size is None or r.font.size.pt < 18:
                             r.font.size = Pt(18)
                         rPr = r._r.get_or_add_rPr()
                         rPr.set("b", "1")
-                        for ft, fn in [
-                            ("a:latin", "Times New Roman"),
-                            ("a:ea", "微软雅黑"),
-                            ("a:cs", "Times New Roman"),
-                            ("a:sym", "Times New Roman"),
-                        ]:
-                            fel = rPr.find(qn(ft))
-                            if fel is None:
-                                fel = etree.SubElement(rPr, qn(ft))
-                            fel.set("typeface", fn)
-                for arpr in sh._element.findall(f".//{qn('a:rPr')}"):
-                    parent_tag = arpr.getparent().tag
-                    if parent_tag.endswith("}r") and "math" in parent_tag:
-                        if int(arpr.get("sz", "1800")) < 1800:
-                            arpr.set("sz", "1800")
-                        arpr.set("b", "1")
+                        _ensure_four_font_slots(rPr)
             if sh.has_table:
                 for row in sh.table.rows:
                     for cell in row.cells:
@@ -434,11 +729,33 @@ def enforce_min_18pt_all_slides(prs):
                             for r in p.runs:
                                 rPr = r._r.get_or_add_rPr()
                                 cur_bl = rPr.get("baseline")
-                                sz = int(r.font.size.pt) if r.font.size else 18
+                                cur_it = rPr.get("i") == "1"
+                                cur_pt = r.font.size.pt if r.font.size is not None else 18
+                                cur_col = r.font.color.rgb if (r.font.color and r.font.color.type == 1) else C_BLACK
                                 set_run_font(
                                     r,
-                                    size_pt=max(18, sz),
+                                    size_pt=max(18, cur_pt),
                                     bold=True,
-                                    color=r.font.color.rgb if r.font.color and r.font.color.type == 1 else C_BLACK,
+                                    color=cur_col,
+                                    italic=cur_it,
                                     baseline=cur_bl,
                                 )
+        # 覆盖全页 OMML <m:r>（含被 PowerPoint 包入 mc:AlternateContent/Choice 的公式，跳过 Fallback）
+        for el in slide._element.iter():
+            if not (el.tag.endswith("}r") and "math" in el.tag):
+                continue
+            if _in_mc_fallback(el):
+                continue
+            arpr = el.find(qn("a:rPr"))
+            if arpr is None:
+                mt = el.find("{http://schemas.openxmlformats.org/officeDocument/2006/math}t")
+                arpr = etree.Element(qn("a:rPr"))
+                if mt is not None:
+                    el.insert(list(el).index(mt), arpr)
+                else:
+                    el.append(arpr)
+            sz_val = arpr.get("sz")
+            if sz_val is None or int(sz_val) < 1800:
+                arpr.set("sz", "1800")
+            arpr.set("b", "1")
+            _ensure_four_font_slots(arpr)

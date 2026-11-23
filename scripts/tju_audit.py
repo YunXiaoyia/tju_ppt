@@ -7,13 +7,15 @@ TJU-PPT 自动审计 (tju_audit.py)
    抗锯齿会产生两色之间的过渡色，因此判定标准为“像素到任意两种允许色连线段的 RGB 距离”，
    而不是到 5 个色点的距离；照片 / 论文截图不适用。
 2. audit_pptx(pptx)：OpenXML 级审计（SKILL.md §4.2 第 2 步的可执行版本）
-   - 文字 run：sz >= 1800、b="1"、四槽位字体 (latin/ea/cs/sym)
-   - 颜色：所有 a:srgbClr 只能取 ALLOWED_HEX
-   - 残留标记：未解析的 _{ / ^{ 、"承上启下"、备注页文字
+   - 文字 run（普通 <a:r> 与 OMML <m:r>，自动跳过 mc:Fallback）：sz >= 1800、b="1"、四槽位字体 (latin/ea/cs/sym)
+   - 颜色：所有显式 srgbClr 只能取 ALLOWED_HEX；禁止显式 schemeClr 及未设填充/边框回退到主题色的形状
+   - 残留标记：未解析的 _{ / ^{ 、裸数学下标/上标（如 M_t、x^2）、"承上启下"、备注页文字
    - 包围盒重叠：ox > 0.03 in 且 oy > 0.03 in；直线连接器与无填充虚线容器不计入
+3. audit_content(pptx)：内容级告警（--content，均为需人工判断的 warning）
+   - 单页可见字数 > max_units、纯文字页（无图且无原生流程图）、多行文字溢出估计、绝对化表述、口语化表述、专业缩写首次出现
 
 命令行：
-    python tju_audit.py deck.pptx [--skip 1,2] [--images fig1.png fig2.png]
+    python tju_audit.py deck.pptx [--skip 1,2] [--content] [--images fig1.png fig2.png]
 """
 
 import argparse
@@ -27,6 +29,13 @@ from PIL import Image
 ALLOWED_HEX = {"00337F", "EAF1FB", "C00000", "000000", "FFFFFF"}
 _RGB = np.array([[int(h[i:i + 2], 16) for i in (0, 2, 4)] for h in sorted(ALLOWED_HEX)], dtype=float)
 EMU = 914400.0
+_A_NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+_M_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/math}"
+
+# 匹配未转为上下标的裸数学表达式（如 M_t、S_k、L_pair、ϕ_split、x^2），避开多字母代码标识符（ERR_CODE、add_flow_pipeline）
+_RAW_MATH = re.compile(
+    r"(?<![A-Za-z0-9_/\\.])([A-Za-z\u0370-\u03FF]_[A-Za-z0-9]+|[A-Za-z0-9\u0370-\u03FF]\^[A-Za-z0-9+\-*]+)(?![A-Za-z0-9_])"
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -74,9 +83,69 @@ def _is_exempt(sh):
     return False
 
 
+def _in_mc_fallback(el):
+    cur = el.getparent()
+    while cur is not None:
+        if cur.tag.endswith("}Fallback"):
+            return True
+        cur = cur.getparent()
+    return False
+
+
+def _in_p_style(el):
+    cur = el.getparent()
+    while cur is not None:
+        if cur.tag.endswith("}style"):
+            return True
+        cur = cur.getparent()
+    return False
+
+
+def _check_rpr(issues, idx, rpr, text, kind="run"):
+    if rpr is None:
+        issues.append(f"slide {idx}: {kind} without rPr {text[:20]!r}")
+        return
+    sz = rpr.get("sz")
+    if sz is None or int(sz) < 1800:
+        issues.append(f"slide {idx}: {kind} font size {sz} < 1800 in {text[:20]!r}")
+    if rpr.get("b") != "1":
+        issues.append(f"slide {idx}: {kind} not bold {text[:20]!r}")
+    missing = [tag for tag in ("latin", "ea", "cs", "sym") if rpr.find(f"{_A_NS}{tag}") is None]
+    if missing:
+        issues.append(f"slide {idx}: {kind} missing font slots {missing} in {text[:20]!r}")
+
+
+def _check_unstyled_theme_fallback(issues, idx, sh):
+    """检测 add_shape() 后未设填充或边框、从而回退到 <p:style> 主题色（accent1 等）的几何形状。"""
+    el = sh._element
+    if not el.tag.endswith("}sp"):
+        return
+    nv = el.find("{http://schemas.openxmlformats.org/presentationml/2006/main}nvSpPr")
+    if nv is not None:
+        cNvSpPr = nv.find("{http://schemas.openxmlformats.org/presentationml/2006/main}cNvSpPr")
+        nvPr = nv.find("{http://schemas.openxmlformats.org/presentationml/2006/main}nvPr")
+        if (cNvSpPr is not None and cNvSpPr.get("txBox") == "1") or (
+            nvPr is not None and nvPr.find("{http://schemas.openxmlformats.org/presentationml/2006/main}ph") is not None
+        ):
+            return
+    style = el.find("{http://schemas.openxmlformats.org/presentationml/2006/main}style")
+    spPr = el.find("{http://schemas.openxmlformats.org/presentationml/2006/main}spPr")
+    if style is None or spPr is None:
+        return
+    fill_tags = {f"{_A_NS}{t}" for t in ("noFill", "solidFill", "gradFill", "blipFill", "pattFill", "grpFill")}
+    has_fill = any(c.tag in fill_tags for c in spPr)
+    fillRef = style.find(f"{_A_NS}fillRef")
+    if not has_fill and fillRef is not None and fillRef.get("idx", "0") != "0":
+        issues.append(f"slide {idx}: shape {sh.name!r} uses default theme fillRef (set fill color or background())")
+    ln = spPr.find(f"{_A_NS}ln")
+    has_ln_fill = ln is not None and any(c.tag in fill_tags for c in ln)
+    lnRef = style.find(f"{_A_NS}lnRef")
+    if not has_ln_fill and lnRef is not None and lnRef.get("idx", "0") != "0":
+        issues.append(f"slide {idx}: shape {sh.name!r} uses default theme lnRef (set line color or background())")
+
+
 def audit_pptx(path, skip_slides=(), overlap_tol=0.03, check_overlap=True):
     from pptx import Presentation
-    from pptx.oxml.ns import qn
 
     prs = Presentation(path)
     issues = []
@@ -85,32 +154,50 @@ def audit_pptx(path, skip_slides=(), overlap_tol=0.03, check_overlap=True):
             continue
         if slide.has_notes_slide and slide.notes_slide.notes_text_frame.text.strip():
             issues.append(f"slide {idx}: notes not empty")
-        xml = slide._element.xml
-        for hexv in set(re.findall(r'srgbClr val="([0-9A-Fa-f]{6})"', xml)):
-            if hexv.upper() not in ALLOWED_HEX:
+
+        root = slide._element
+        # 1. 颜色审计（srgbClr 限制在 ALLOWED_HEX；非 <p:style> 内的显式 schemeClr 一律告警）
+        for clr in root.iter(f"{_A_NS}srgbClr"):
+            if _in_mc_fallback(clr):
+                continue
+            hexv = (clr.get("val") or "").upper()
+            if hexv and hexv not in ALLOWED_HEX:
                 issues.append(f"slide {idx}: color #{hexv} outside palette")
-        if "承上启下" in xml:
+        for sclr in root.iter(f"{_A_NS}schemeClr"):
+            if _in_mc_fallback(sclr) or _in_p_style(sclr):
+                continue
+            issues.append(f"slide {idx}: theme color schemeClr({sclr.get('val')}) instead of explicit TJU RGB")
+        for sh in slide.shapes:
+            _check_unstyled_theme_fallback(issues, idx, sh)
+
+        # 2. 文本与公式 run 审计（a:r 与 OMML m:r）
+        if "承上启下" in root.xml:
             issues.append(f"slide {idx}: contains '承上启下'")
-        for r in slide._element.iter(qn("a:r")):
-            t = r.find(qn("a:t"))
+        for r in root.iter(f"{_A_NS}r"):
+            if _in_mc_fallback(r):
+                continue
+            t = r.find(f"{_A_NS}t")
             text = (t.text or "") if t is not None else ""
             if not text.strip():
                 continue
             if "_{" in text or "^{" in text:
                 issues.append(f"slide {idx}: unparsed sub/sup markup in {text[:30]!r}")
-            rpr = r.find(qn("a:rPr"))
-            if rpr is None:
-                issues.append(f"slide {idx}: run without rPr {text[:20]!r}")
+            elif "http" not in text and "/" not in text:
+                raw_m = _RAW_MATH.search(text)
+                if raw_m:
+                    issues.append(f"slide {idx}: raw ASCII math {raw_m.group(1)!r} in {text[:30]!r} (use _{{}}/^{{}})")
+            _check_rpr(issues, idx, r.find(f"{_A_NS}rPr"), text, kind="run")
+
+        for mr in root.iter(f"{_M_NS}r"):
+            if _in_mc_fallback(mr):
                 continue
-            sz = rpr.get("sz")
-            if sz is None or int(sz) < 1800:
-                issues.append(f"slide {idx}: font size {sz} < 1800 in {text[:20]!r}")
-            if rpr.get("b") != "1":
-                issues.append(f"slide {idx}: not bold {text[:20]!r}")
-            slots = {tag: rpr.find(qn(f"a:{tag}")) for tag in ("latin", "ea", "cs", "sym")}
-            missing = [k for k, v in slots.items() if v is None]
-            if missing:
-                issues.append(f"slide {idx}: missing font slots {missing} in {text[:20]!r}")
+            mt = mr.find(f"{_M_NS}t")
+            text = (mt.text or "") if mt is not None else ""
+            if not text.strip():
+                continue
+            _check_rpr(issues, idx, mr.find(f"{_A_NS}rPr"), text, kind="OMML")
+
+        # 3. 声明包围盒重叠审计
         if check_overlap:
             shapes = [s for s in slide.shapes if not _is_exempt(s)]
             for a, b in itertools.combinations(shapes, 2):
@@ -126,12 +213,23 @@ def audit_pptx(path, skip_slides=(), overlap_tol=0.03, check_overlap=True):
 # --------------------------------------------------------------------------- #
 # 内容级告警（narrative_principles.md 的可自动化部分；均为“需人工判断”的 warning）
 # --------------------------------------------------------------------------- #
-# 口水话 / 过度小白化表述（narrative_principles.md P1b）：只告警，按语境人工判断
-COLLOQUIAL_WORDS = ("科普", "草稿台", "算总账", "总账", "看图", "手眼微调", "抓不准", "认不出", "写不完", "顺手",
-                    "松绑", "上车", "挡死", "盲抓", "大坑", "偷懒", "瞎", "搞定", "痛点", "为什么难", "连锁反应",
-                    "（最快）", "（最灵活）", "（最稳妥）", "！", "!", "白话", "小白")
-ABSOLUTE_WORDS = ("全局最优", "彻底", "杜绝", "100%", "100 %", "绝对", "完美", "首次", "零误差")
-_ACRONYM = re.compile(r"(?<![A-Za-z])([A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9\-]*)(?![A-Za-z])")
+# 通用口水话 / 过度非学术表述（避免误伤财务“总账”、汽车“上车”、机器人“盲抓”等正当专业术语）
+COLLOQUIAL_WORDS = (
+    "小白", "大白话", "口水话", "大坑", "偷懒", "瞎猜", "搞定", "痛点", "顺手", "松绑",
+    "写不完", "认不出", "抓不准", "草稿台", "算总账", "为什么难",
+    "（最快）", "（最灵活）", "（最稳妥）", "！", "!",
+)
+# 绝对化声明（避免把“绝对误差 MAE / 绝对定位精度 / 凸问题全局最优解”误判为过度承诺）
+ABSOLUTE_WORDS = ("彻底", "杜绝", "100%", "100 %", "完美", "零误差", "绝对可靠", "绝对安全", "绝对最优", "永不")
+
+_ACRONYM = re.compile(r"(?<![A-Za-z0-9\-])([A-Z][A-Za-z0-9]*(?:-[A-Z][A-Za-z0-9]*)*)(?![A-Za-z0-9\-])")
+_COMMON_ACRONYMS = {
+    "IEEE", "ACM", "CVPR", "ICCV", "ECCV", "ICRA", "IROS", "RSS", "ICLR", "ICML", "AAAI",
+    "IJCAI", "IJRR", "T-ASE", "T-RO", "RA-L", "TPAMI", "CoRL", "NeurIPS", "TOG",
+    "RGB", "RGB-D", "2D", "3D", "4D", "6-DoF", "PDF", "PNG", "SVG", "JPG", "GIF", "PPT", "PPTX",
+    "GPU", "CPU", "RAM", "VRAM", "ROM", "API", "JSON", "XML", "HTML", "URL", "DOI", "ROS", "ROS2",
+    "TJU", "COM", "OS", "IO",
+}
 _WIDE = re.compile(r"[\u2E80-\u9FFF\uFF00-\uFFEF\u3000-\u303F]")
 
 
@@ -150,6 +248,24 @@ def _slide_text(slide):
 def _visible_units(text):
     """CJK 字符 + 拉丁词/数字串 的个数，近似“观众需要读的量”。"""
     return len(_WIDE.findall(text)) + len(re.findall(r"[A-Za-z0-9]+", text))
+
+
+def _has_visual_element(slide):
+    """检查内容页是否包含视觉元素：图片/图表，或原生流程图/架构图（含连接器或箭头形状）。"""
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+
+    for sh in slide.shapes:
+        if sh.shape_type in (MSO_SHAPE_TYPE.PICTURE, MSO_SHAPE_TYPE.CHART):
+            return True
+        if sh.shape_type == MSO_SHAPE_TYPE.PLACEHOLDER and "pic" in sh._element.xml[:400]:
+            return True
+        if sh._element.tag.endswith("}cxnSp"):
+            return True
+        if sh.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE:
+            xml_head = sh._element.xml[:800]
+            if 'prst="rightArrow"' in xml_head or 'prst="downArrow"' in xml_head or 'prst="upArrow"' in xml_head or 'prst="leftArrow"' in xml_head:
+                return True
+    return False
 
 
 def _est_text_height(sh):
@@ -192,27 +308,39 @@ def _est_text_height(sh):
     return total, sh.height / EMU
 
 
+def _extract_acronyms(text):
+    out = set()
+    for tok in _ACRONYM.findall(text):
+        if tok in _COMMON_ACRONYMS:
+            continue
+        if sum(1 for c in tok if c.isupper()) < 2:
+            continue
+        # 跳过纯“单字母+数字”编号如 A1、P1、R1、V0
+        if re.fullmatch(r"[A-Z]\d+", tok):
+            continue
+        out.add(tok)
+    return out
+
+
 def audit_content(path, skip_slides=(), max_units=200):
-    """返回 warning 列表：文字密度、无图内容页、估计溢出、绝对化表述、缩写首次出现。"""
+    """返回 warning 列表：文字密度、无图内容页、估计溢出、口语化/绝对化表述、缩写首次出现。"""
     from pptx import Presentation
-    from pptx.enum.shapes import MSO_SHAPE_TYPE
 
     prs = Presentation(path)
     warns, seen_acr = [], set()
     for idx, slide in enumerate(prs.slides, start=1):
-        text = _slide_text(slide)
-        new_acr = sorted({a for a in _ACRONYM.findall(text) if a not in seen_acr})
-        seen_acr.update(new_acr)
         if idx in skip_slides:
             continue
+        text = _slide_text(slide)
+        acrs = _extract_acronyms(text)
+        new_acr = sorted(a for a in acrs if a not in seen_acr)
+        seen_acr.update(new_acr)
+
         units = _visible_units(text)
         if units > max_units:
             warns.append(f"slide {idx}: dense text ({units} visible units > {max_units}); cut, split, or move detail to the report")
-        has_pic = any(sh.shape_type in (MSO_SHAPE_TYPE.PICTURE, MSO_SHAPE_TYPE.CHART) or
-                      (sh.shape_type == MSO_SHAPE_TYPE.PLACEHOLDER and "pic" in sh._element.xml[:400])
-                      for sh in slide.shapes)
-        if not has_pic:
-            warns.append(f"slide {idx}: no picture/chart on content slide (photo, paper figure, schematic, or plot)")
+        if not _has_visual_element(slide):
+            warns.append(f"slide {idx}: no visual (photo, paper figure, native diagram, schematic, or plot)")
         for sh in slide.shapes:
             if not sh.has_text_frame or not sh.text_frame.text.strip():
                 continue
@@ -236,7 +364,7 @@ def main():
     ap.add_argument("--skip", default="", help="跳过的页码，如 1,2（封面/目录）")
     ap.add_argument("--images", nargs="*", default=[])
     ap.add_argument("--no-overlap", action="store_true")
-    ap.add_argument("--content", action="store_true", help="内容级告警：密度/无图/溢出估计/绝对化/缩写首现")
+    ap.add_argument("--content", action="store_true", help="内容级告警：密度/无图/溢出估计/口语化/绝对化/缩写首现")
     ap.add_argument("--max-units", type=int, default=200, help="单页可见字数上限（CJK 字 + 拉丁词）")
     ap.add_argument("--strict-content", action="store_true", help="内容告警计入失败退出码")
     a = ap.parse_args()

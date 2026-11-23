@@ -21,6 +21,7 @@ TJU-PPT 答辩投影级 Matplotlib 数据图样式 (tju_plot_style.py)
     save_tju_figure(fig, "fig_rmse.png")
 """
 
+import os
 import re
 import warnings
 from itertools import cycle
@@ -125,15 +126,13 @@ def apply_tju_style(base_pt=18, tick_pt=16, legend_pt=16):
         "axes.unicode_minus": False,
         "image.cmap": "tju_seq",
     })
-    try:
-        matplotlib.colormaps.register(TJU_CMAP_SEQ)
-        matplotlib.colormaps.register(TJU_CMAP_DIV)
-    except Exception:
-        try:
-            plt.register_cmap(cmap=TJU_CMAP_SEQ)
-            plt.register_cmap(cmap=TJU_CMAP_DIV)
-        except Exception:
-            pass
+    for cmap in (TJU_CMAP_SEQ, TJU_CMAP_DIV):
+        if hasattr(matplotlib, "colormaps"):
+            if cmap.name not in matplotlib.colormaps:
+                matplotlib.colormaps.register(cmap)
+        else:
+            if cmap.name not in plt.colormaps():
+                plt.register_cmap(cmap=cmap)
 
 
 def new_figure(width_in, height_in, nrows=1, ncols=1, **kw):
@@ -166,8 +165,9 @@ def save_tju_figure(fig, path, dpi=300, extra_formats=(), min_pt=14):
                     if t.get_text() and t.get_visible() and t.get_fontsize() < min_pt})
     if small:
         warnings.warn(f"[tju-ppt] 图中存在小于 {min_pt} pt 的文字 {small}，投影可能看不清。")
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     fig.savefig(path, dpi=dpi)
-    stem = path.rsplit(".", 1)[0]
+    stem, _ = os.path.splitext(path)
     for ext in extra_formats:
         fig.savefig(f"{stem}.{ext}")
     return path
