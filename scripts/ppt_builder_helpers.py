@@ -390,24 +390,93 @@ def rearrange_slides(prs, src_indices_0based):
         sldIdLst.append(el)
 
 
+def clear_all_slides(prs):
+    """清空模板中的示例页（保留母版与版式），便于随后用 new_*_slide() 按需新增任意页数。"""
+    rearrange_slides(prs, [])
+
+
+_TJU_LAYOUT_NAMES = {
+    "cover": ("标题幻灯片",),
+    "thanks": ("标题幻灯片",),
+    "content": ("1_自定义版式",),
+    "toc": ("1_仅标题",),
+    "blank": ("空白",),
+}
+_TJU_LAYOUT_FALLBACK_IDX = {"cover": 0, "thanks": 0, "content": 1, "toc": 2, "blank": 3}
+
+
+def get_tju_layout(prs, kind="content"):
+    """按语义类型 ('cover'/'content'/'toc'/'blank'/'thanks') 查找天大母版版式。
+    同时兼容新版单母版 tju_template.pptx 与旧版双母版课题组模板。"""
+    if kind not in _TJU_LAYOUT_NAMES:
+        raise ValueError(f"unknown layout kind {kind!r}; use {list(_TJU_LAYOUT_NAMES)}")
+    names = _TJU_LAYOUT_NAMES[kind]
+    for master in prs.slide_masters:
+        for lay in master.slide_layouts:
+            if lay.name in names:
+                return lay
+    idx = _TJU_LAYOUT_FALLBACK_IDX[kind]
+    if idx < len(prs.slide_layouts):
+        return prs.slide_layouts[idx]
+    raise LookupError(f"Could not find TJU layout for kind={kind!r}")
+
+
+def new_cover_slide(prs, title_lines, meta_lines, title_pt=36, meta_pt=22, text_color=C_WHITE):
+    """基于天大母版新增并格式化封面页。"""
+    slide = prs.slides.add_slide(get_tju_layout(prs, "cover"))
+    format_cover_slide(slide, title_lines, meta_lines, title_pt=title_pt, meta_pt=meta_pt, text_color=text_color)
+    return slide
+
+
+def new_toc_slide(prs, toc_items, active_idx=0, page_num=None):
+    """基于天大母版新增并格式化目录/章节过渡页。"""
+    slide = prs.slides.add_slide(get_tju_layout(prs, "toc"))
+    format_toc_slide(slide, toc_items, active_idx=active_idx, page_num=page_num)
+    return slide
+
+
+def new_content_slide(prs, banner_title, subtitle_text, page_num=None, subtitle_pt=20, banner_pt=28):
+    """基于天大母版新增并格式化标准内容页（顶部蓝条 + 副标题竖条/细线 + 右下角页码）。"""
+    slide = prs.slides.add_slide(get_tju_layout(prs, "content"))
+    setup_tju_content_slide(
+        slide, banner_title, subtitle_text, page_num=page_num,
+        subtitle_pt=subtitle_pt, banner_pt=banner_pt,
+    )
+    return slide
+
+
+def new_thanks_slide(prs, lines=("恳请各位老师批评指正", "谢谢！"), size_pt=40, text_color=C_WHITE):
+    """基于天大母版新增并格式化致谢页。"""
+    slide = prs.slides.add_slide(get_tju_layout(prs, "thanks"))
+    format_thanks_slide(slide, lines=lines, size_pt=size_pt, text_color=text_color)
+    return slide
+
+
 def save_staged_pptx(prs, target_path, staged_path=None, fallback_suffix="_staged"):
-    """先写入暂存文件再 copy2 到目标路径，避免目标 PPTX 正被 PowerPoint 打开时直接报错中断。"""
+    """先写入暂存文件再复制到目标路径，避免目标 PPTX 正被 PowerPoint 打开时直接报错中断。"""
     target_abs = os.path.abspath(target_path)
     os.makedirs(os.path.dirname(target_abs), exist_ok=True)
-    if staged_path is None:
+    auto_tmp = staged_path is None
+    if auto_tmp:
         fd, staged_path = tempfile.mkstemp(prefix="tju_ppt_", suffix=".pptx")
         os.close(fd)
     else:
         os.makedirs(os.path.dirname(os.path.abspath(staged_path)), exist_ok=True)
     prs.save(staged_path)
     try:
-        shutil.copy2(staged_path, target_abs)
+        shutil.copyfile(staged_path, target_abs)
         return target_abs
     except PermissionError:
         stem, ext = os.path.splitext(target_abs)
         alt_path = f"{stem}{fallback_suffix}{ext}"
-        shutil.copy2(staged_path, alt_path)
+        shutil.copyfile(staged_path, alt_path)
         return alt_path
+    finally:
+        if auto_tmp and os.path.exists(staged_path):
+            try:
+                os.remove(staged_path)
+            except OSError:
+                pass
 
 
 def add_dashed_box(slide, left, top, width, height, line_color=C_BLACK, weight_pt=1.5):

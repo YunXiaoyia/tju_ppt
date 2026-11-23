@@ -14,8 +14,9 @@
 3. **PowerPoint 原生可编辑公式（`<a14:m>` OMML）与行内真实上下标**
    - 避免低清公式截图与正文中裸露的 `x_k^ref`、`Q_k` 代码下划线：行间公式直接注入 `<a14:m>` 原生对象（重音帽默认使用组合符 `U+0302` 避免压字）；正文、卡片与表格支持 `_{sub}` / `^{sup}` 自动转为 OpenXML `baseline` 真实上下标（同时保持 `sz >= 1800` 合规）。
    - 内置 LibreOffice Impress (`StarMath`) 与原生 PowerPoint 双环境渲染避坑规则，规避公式渲染异常。
-4. **学术版式骨架与可复用组件库（`ppt_builder_helpers.py`）**
-   - 内置封面（`format_cover_slide`）、目录/过渡页（`format_toc_slide`）、内容页骨架（`setup_tju_content_slide`，自动清理 `mc:AlternateContent` 幽灵残留）、致谢页（`format_thanks_slide`）、模板页安全裁剪重排（`rearrange_slides`）与暂存写回（`save_staged_pptx`）。
+4. **干净单母版模板与可复用组件库（`tju_template.pptx` + `ppt_builder_helpers.py`）**
+   - `references/tju_template.pptx` 为精简清理后的**单母版、4 标准版式、4 页示例骨架**（`标题幻灯片 / 1_自定义版式 / 1_仅标题 / 空白`，内置 TJU 四色与中英主题字体，0 审计问题，体积约 1.5 MB）。
+   - 内置 `clear_all_slides` + `new_cover_slide` / `new_toc_slide` / `new_content_slide` / `new_thanks_slide` 按需新建任意页数，同时支持存量课件原地编辑（`rearrange_slides`、`setup_tju_content_slide` 自动清理 `mc:AlternateContent` 幽灵残留）与暂存写回（`save_staged_pptx`）。
    - 内置连体双层卡片（`add_joined_card`）、严格四色表格/徽标表（`add_clean_tju_table`）与单形状等比图框（`add_image_fit`），拒绝满屏纯项目符号。
    - 内部双栏虚线框排布参考：`ref_layout_1_mechanism_formula.jpg`、`ref_layout_2_perception_icp.jpg`、`ref_layout_3_abc_ladder.jpg`（仅参考其双栏虚线框内组件层次，顶栏与页码以本规范为准）。
 5. **版面留白与双平台渲染自检闭环**
@@ -51,7 +52,7 @@ tju_ppt/
 │   ├── example_opening_presentation.pptx    # 0 审计问题的通用开题汇报示例成品
 │   └── generate_diagram_showcase.py         # 四类绘图路线演示 + 自动审计
 └── references/
-    ├── tju_template.pptx                    # 天津大学课题组 16:9 标准模板（Master 1 含封面/目录/内容版式）
+    ├── tju_template.pptx                    # 天津大学 16:9 纯净单母版模板（4 版式 + 4 页合规骨架，0 审计问题）
     ├── diagram_routing.md                   # 绘图路由、已知限制与视觉自检清单
     ├── narrative_principles.md              # 叙事弧、语体、术语、密度、论断规范与开题完整性清单
     ├── tju_mermaid_theme.json               # 可选：Mermaid TJU 主题

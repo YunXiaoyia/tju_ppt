@@ -57,11 +57,12 @@ Allow **only** these five hex values across all shapes, borders, fills, tables, 
 ## 2. Template Map, Visual Hierarchy & Reusable Primitives
 
 ### 2.1 Template & Reference Layout Boundaries
-- **`references/tju_template.pptx`** (26-slide source deck): contains two Slide Masters; `Master 1` holds the actual TJU layouts:
-  - Cover / Thanks (`标题幻灯片`): 0-based slide indices `0`, `25` → style with `format_cover_slide()` / `format_thanks_slide()` (white bold text on dark-blue background).
-  - TOC / Section transitions (`1_仅标题`): 0-based indices `1`, `10`, `18`, `21` → style with `format_toc_slide(slide, toc_items, active_idx, page_num)`.
-  - Content slides (`1_自定义版式`): 0-based indices `2–9`, `11–17`, `19–20`, `22–24` → rebuild every selected slide via `setup_tju_content_slide()` so legacy template colors/fonts are completely cleared.
-  - Prune and reorder safely with `rearrange_slides(prs, src_indices_0based)` (automatically drops unused `rId` relations).
+- **`references/tju_template.pptx`** (clean 1-master, 4-layout, 4-starter-slide TJU template, 0 audit issues, built-in TJU theme colors & `Times New Roman + 微软雅黑` font scheme):
+  - `prs.slide_layouts[0]` (`标题幻灯片`): Cover & Thanks (campus background + TJU logo).
+  - `prs.slide_layouts[1]` (`1_自定义版式`): Content slide (dark-blue top banner with TJU crest).
+  - `prs.slide_layouts[2]` (`1_仅标题`): TOC / Section transition (left graphic + `汇报内容 / CONTENTS`).
+  - `prs.slide_layouts[3]` (`空白`): Clean blank TJU layout.
+  - **Recommended build flow**: load `tju_template.pptx` → `clear_all_slides(prs)` → add unlimited slides via `new_cover_slide()`, `new_toc_slide()`, `new_content_slide()`, `new_thanks_slide()` (`get_tju_layout()` also works on legacy 2-master TJU `.pptx` decks). When editing an existing deck in place, use `rearrange_slides(prs, src_indices_0based)` + `setup_tju_content_slide()`.
 - **`references/reference_layouts/ref_layout_1..3.jpg`**: from an older light-banner template (white top banner, bottom red summary strip, no page numbers). Use them **only as reference for interior dual-column dashed-box hierarchy** (3-box flows, joined cards, equation+annotation pairing); follow §1–§2 for the dark-blue banner, bottom-right slide number, and omission of bottom transition strips.
 
 ### 2.2 Standard Skeleton & Structured Components (`scripts/ppt_builder_helpers.py`)
@@ -139,14 +140,14 @@ Native-shape modules live in `scripts/tju_native_diagrams.py`; they run `check_b
 6. **Keep sources**: store generator scripts and `.svg` files beside the PNGs (`figures/`) because routes C/D are not editable inside PowerPoint.
 
 ## Supporting Files
-- `scripts/ppt_builder_helpers.py`: OpenXML typography, `_{sub}`/`^{sup}` rich text, OMML equations, framed images, cover/TOC/content/thanks skeletons, joined cards, 4-color tables, slide pruning/reordering, staging save, and `enforce_min_18pt_all_slides`.
+- `scripts/ppt_builder_helpers.py`: OpenXML typography, `_{sub}`/`^{sup}` rich text, OMML equations, framed images, `clear_all_slides` + `new_cover/toc/content/thanks_slide` (`get_tju_layout`), joined cards, 4-color tables, slide pruning/reordering, staging save, and `enforce_min_18pt_all_slides`.
 - `scripts/tju_native_diagrams.py`: Editable native flow, feedback-loop, and layered-architecture diagrams, connectors, and 18 pt box-fit budget.
 - `scripts/tju_svg_diagram.py`: `TjuDiagram` research-schematic engine (Python API, JSON spec, or `layered()` auto layout; validates, then renders SVG/PNG).
 - `scripts/tju_plot_style.py`: Matplotlib style for projected defense slides using the TJU palette.
 - `scripts/tju_audit.py`: Executable OpenXML audit (`a:r` + OMML `m:r`, strict palette & theme-fallback check, raw math, overlaps), content-warning audit (`--content`), and self-drawn image palette audit.
 - `examples/generate_tju_opening_ppt.py`: Complete 10-slide compliant opening-defense generator example (outputs `examples/example_opening_presentation.pptx`).
 - `examples/generate_diagram_showcase.py`: Four-slide demo of every diagram route plus automated audit.
-- `references/tju_template.pptx`: Tianjin University 16:9 PowerPoint template (`Master 1` holds cover/TOC/content layouts).
+- `references/tju_template.pptx`: Clean 1-master, 4-layout, 4-starter-slide Tianjin University 16:9 template (0 audit issues, TJU theme colors & fonts).
 - `references/reference_layouts/`: Three interior dual-column dashed-box visual hierarchy references (`ref_layout_1..3.jpg`).
 - `references/diagram_routing.md`, `references/tju_mermaid_theme.json`: Diagram routing, known limits, QA checklist, and optional Mermaid theme.
 - `references/narrative_principles.md`: Audience, story arc, academic register, define-before-use, density budget, related-work compression, claim hygiene, and opening-report completeness checklist (§0 in full).

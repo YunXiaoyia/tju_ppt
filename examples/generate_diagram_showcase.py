@@ -26,7 +26,7 @@ from pptx.enum.text import PP_ALIGN
 
 from ppt_builder_helpers import (
     C_BLACK, C_BLUE, C_RED, add_dashed_box, add_image_fit, add_text_block,
-    enforce_min_18pt_all_slides, setup_tju_content_slide,
+    clear_all_slides, enforce_min_18pt_all_slides, new_content_slide, save_staged_pptx,
 )
 from tju_native_diagrams import add_feedback_loop, add_flow_pipeline, add_layered_architecture
 from tju_svg_diagram import TjuDiagram
@@ -36,20 +36,11 @@ from tju_audit import audit_image_palette, audit_pptx
 TEMPLATE = os.path.abspath(os.path.join(HERE, "../references/tju_template.pptx"))
 OUT_DIR = os.path.join(HERE, "showcase_out")
 OUT_PPTX = os.path.join(OUT_DIR, "diagram_showcase.pptx")
-KEEP = [3, 12, 15, 18]  # 模板中带顶部蓝色标题栏的内容页（1-based）
 
 # 双栏虚线框标准几何（与 SKILL.md §2 一致）
 COL_TOP, COL_H = 1.78, 5.22
 L_LEFT, L_W = 0.45, 6.10
 R_LEFT, R_W = 6.78, 6.10
-
-
-def keep_slides(prs, keep):
-    sld_ids = prs.slides._sldIdLst
-    for idx, sid in reversed(list(enumerate(list(sld_ids), start=1))):
-        if idx not in keep:
-            prs.part.drop_rel(sid.rId)
-            sld_ids.remove(sid)
 
 
 # --------------------------------------------------------------------------- #
@@ -112,11 +103,10 @@ def build_plots(curve_png, bar_png):
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     prs = Presentation(TEMPLATE)
-    keep_slides(prs, KEEP)
-    s1, s2, s3, s4 = prs.slides
+    clear_all_slides(prs)
 
     # ---------------- P1 ----------------
-    setup_tju_content_slide(s1, "研究内容与方案", "总体思路：感知—预测—优化—执行的闭环链路", page_num=1)
+    s1 = new_content_slide(prs, "研究内容与方案", "总体思路：感知—预测—优化—执行的闭环链路", page_num=1)
     add_dashed_box(s1, L_LEFT, COL_TOP, 12.43, COL_H)
     add_text_block(s1, 0.70, 1.95, 11.9, 0.42, [("① 前向控制链（add_flow_pipeline）", C_BLUE, 20)])
     add_flow_pipeline(s1, 0.75, 2.45, 11.85, 1.05,
@@ -126,7 +116,7 @@ def main():
                       ["仿真采样", "策略更新", "实车验证"], "误差反馈：修正奖励函数与约束边界")
 
     # ---------------- P2 ----------------
-    setup_tju_content_slide(s2, "研究内容与方案", "系统架构：四层解耦，红框为本文新增模块", page_num=2)
+    s2 = new_content_slide(prs, "研究内容与方案", "系统架构：四层解耦，红框为本文新增模块", page_num=2)
     add_dashed_box(s2, L_LEFT, COL_TOP, 12.43, COL_H)
     add_layered_architecture(s2, 0.75, 2.00, 11.85, 4.75, [
         ("应用层", ["仓储搬运", "高位举升", "狭窄通道循迹"]),
@@ -137,7 +127,7 @@ def main():
 
     # ---------------- P3 ----------------
     roadmap = build_svg_roadmap(os.path.join(OUT_DIR, "roadmap.png"))
-    setup_tju_content_slide(s3, "研究内容与方案", "技术路线：两条研究内容汇入自适应 MPC", page_num=3)
+    s3 = new_content_slide(prs, "研究内容与方案", "技术路线：两条研究内容汇入自适应 MPC", page_num=3)
     add_dashed_box(s3, L_LEFT, COL_TOP, L_W, COL_H)
     add_dashed_box(s3, R_LEFT, COL_TOP, R_W, COL_H)
     add_image_fit(s3, roadmap, L_LEFT + 0.10, COL_TOP + 0.11, L_W - 0.20, COL_H - 0.22, border_color=None)
@@ -152,7 +142,7 @@ def main():
     # ---------------- P4 ----------------
     curve, bar = os.path.join(OUT_DIR, "curve.png"), os.path.join(OUT_DIR, "ablation.png")
     build_plots(curve, bar)
-    setup_tju_content_slide(s4, "研究内容与方案", "预期验证：跟踪误差收敛与消融对比（示意数据）", page_num=4)
+    s4 = new_content_slide(prs, "研究内容与方案", "预期验证：跟踪误差收敛与消融对比（示意数据）", page_num=4)
     add_dashed_box(s4, L_LEFT, COL_TOP, 5.20, COL_H)
     add_dashed_box(s4, 5.88, COL_TOP, 7.00, COL_H)
     add_text_block(s4, L_LEFT + 0.18, COL_TOP + 0.18, 4.84, 3.00, [
@@ -169,12 +159,8 @@ def main():
 
     enforce_min_18pt_all_slides(prs)
     staged = os.path.join(OUT_DIR, "staged.pptx")
-    prs.save(staged)
-    try:
-        shutil.copy2(staged, OUT_PPTX)
-    except PermissionError:
-        print(f"[warn] {OUT_PPTX} 被占用，结果保留在 {staged}")
-    print("saved", OUT_PPTX)
+    out = save_staged_pptx(prs, OUT_PPTX, staged_path=staged)
+    print("saved", out)
 
     issues = audit_pptx(OUT_PPTX)
     print(f"[audit pptx] {len(issues)} issue(s)")

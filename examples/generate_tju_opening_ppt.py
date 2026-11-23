@@ -5,8 +5,7 @@ TJU-PPT 标准硕士开题汇报示例生成器（10 页全链路合规范例）
 题目：《面向动态负载工况的移动机器人自适应协同控制研究》（通用学术示例）
 
 完整示范 SKILL.md 全部规范与可复用原语：
-- 模板安全裁剪与重排：rearrange_slides（基于 references/tju_template.pptx 原生母版）
-- 封面 / 目录 / 内容骨架 / 致谢：format_cover_slide / format_toc_slide / setup_tju_content_slide / format_thanks_slide
+- 清空模板示例页并按母版按需新增：clear_all_slides + new_cover_slide / new_toc_slide / new_content_slide / new_thanks_slide
 - 结构化组件：add_joined_card / add_clean_tju_table / add_omml_equation（含 U+0302 重音帽）
 - 自包含绘图：add_flow_pipeline / add_feedback_loop / TjuDiagram / tju_plot_style
 - 全量守门与审计：enforce_min_18pt_all_slides / save_staged_pptx / audit_pptx / audit_content / audit_image_palette
@@ -28,10 +27,10 @@ from pptx.enum.text import PP_ALIGN
 from ppt_builder_helpers import (
     C_BLACK, C_BLUE, C_BLUE_LIGHT, C_RED, C_WHITE,
     add_clean_tju_table, add_dashed_box, add_image_fit, add_joined_card,
-    add_omml_equation, add_solid_box, add_text_block,
-    enforce_min_18pt_all_slides, format_cover_slide, format_thanks_slide,
-    format_toc_slide, m_acc, m_r, m_sub, m_sup, rearrange_slides,
-    save_staged_pptx, setup_tju_content_slide,
+    add_omml_equation, add_solid_box, add_text_block, clear_all_slides,
+    enforce_min_18pt_all_slides, m_acc, m_r, m_sub, m_subsup, m_sup,
+    new_content_slide, new_cover_slide, new_thanks_slide, new_toc_slide,
+    save_staged_pptx,
 )
 from tju_native_diagrams import add_feedback_loop, add_flow_pipeline
 from tju_svg_diagram import TjuDiagram
@@ -94,10 +93,7 @@ def build_expected_plot(png_path):
 
 def build_example_presentation():
     prs = Presentation(TEMPLATE_PATH)
-    # 从 26 页模板精准选取 10 页（0-based）：
-    # 0:封面 | 1:目录01 | 2,3,4:内容页 | 10:目录02 | 11,12,13:内容页 | 25:致谢
-    rearrange_slides(prs, [0, 1, 2, 3, 4, 10, 11, 12, 13, 25])
-    assert len(prs.slides) == 10
+    clear_all_slides(prs)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         scene_png = build_scene_diagram(os.path.join(tmpdir, "scene.png"))
@@ -106,8 +102,8 @@ def build_example_presentation():
         # ------------------------------------------------------------------ #
         # P1 封面
         # ------------------------------------------------------------------ #
-        format_cover_slide(
-            prs.slides[0],
+        new_cover_slide(
+            prs,
             title_lines=["面向动态负载工况的移动机器人", "自适应协同控制研究"],
             meta_lines=["汇报人：张三    导师：李四 教授", "汇报日期：2026 年 11 月"],
         )
@@ -115,14 +111,13 @@ def build_example_presentation():
         # ------------------------------------------------------------------ #
         # P2 目录（高亮 01）
         # ------------------------------------------------------------------ #
-        format_toc_slide(prs.slides[1], TOC_ITEMS, active_idx=0, page_num=2)
+        new_toc_slide(prs, TOC_ITEMS, active_idx=0, page_num=2)
 
         # ------------------------------------------------------------------ #
         # P3 应用场景与核心概念界定
         # ------------------------------------------------------------------ #
-        s3 = prs.slides[2]
-        setup_tju_content_slide(
-            s3, "研究背景及意义",
+        s3 = new_content_slide(
+            prs, "研究背景及意义",
             "应用场景：高举升移动机器人在动态负载下的窄巷循迹控制",
             page_num=3,
         )
@@ -155,9 +150,8 @@ def build_example_presentation():
         # ------------------------------------------------------------------ #
         # P4 难点分析与核心科学问题
         # ------------------------------------------------------------------ #
-        s4 = prs.slides[3]
-        setup_tju_content_slide(
-            s4, "研究背景及意义",
+        s4 = new_content_slide(
+            prs, "研究背景及意义",
             "问题凝练：固定参数控制器难以兼顾动态负载下的精度与安全",
             page_num=4,
         )
@@ -208,9 +202,8 @@ def build_example_presentation():
         # ------------------------------------------------------------------ #
         # P5 国内外研究现状与局限
         # ------------------------------------------------------------------ #
-        s5 = prs.slides[4]
-        setup_tju_content_slide(
-            s5, "研究现状",
+        s5 = new_content_slide(
+            prs, "研究现状",
             "相关研究：扰动补偿与参数自适应分别开展，缺乏动态约束协同",
             page_num=5,
         )
@@ -262,14 +255,13 @@ def build_example_presentation():
         # ------------------------------------------------------------------ #
         # P6 章节过渡（高亮 02）
         # ------------------------------------------------------------------ #
-        format_toc_slide(prs.slides[5], TOC_ITEMS, active_idx=1, page_num=6)
+        new_toc_slide(prs, TOC_ITEMS, active_idx=1, page_num=6)
 
         # ------------------------------------------------------------------ #
         # P7 研究内容：公式与闭环方案
         # ------------------------------------------------------------------ #
-        s7 = prs.slides[6]
-        setup_tju_content_slide(
-            s7, "研究内容与方案",
+        s7 = new_content_slide(
+            prs, "研究内容与方案",
             "核心方法：高阶扰动多步预测与工况自适应闭环求解",
             page_num=7,
         )
@@ -284,7 +276,7 @@ def build_example_presentation():
             + m_sub(m_r("x"), m_r("k"))
             + m_r(" − ", italic=False)
             + m_sub(m_r("x"), m_r("ref", italic=False))
-            + m_sup(m_sub(m_r("‖", italic=False), m_r("Q", color="00337F")), m_r("2", italic=False))
+            + m_subsup(m_r("‖", italic=False), m_r("Q", color="00337F"), m_r("2", italic=False))
             + m_r(" + ", italic=False)
             + m_r("‖", italic=False)
             + m_sub(m_acc(m_r("d"), ch="\u0302"), m_r("k", italic=False))
@@ -323,9 +315,8 @@ def build_example_presentation():
         # ------------------------------------------------------------------ #
         # P8 验证方案与预期指标
         # ------------------------------------------------------------------ #
-        s8 = prs.slides[7]
-        setup_tju_content_slide(
-            s8, "研究内容与方案",
+        s8 = new_content_slide(
+            prs, "研究内容与方案",
             "验证方案：多载荷同条件基线对比与跟踪收敛预期",
             page_num=8,
         )
@@ -362,9 +353,8 @@ def build_example_presentation():
         # ------------------------------------------------------------------ #
         # P9 进度计划与预期成果
         # ------------------------------------------------------------------ #
-        s9 = prs.slides[8]
-        setup_tju_content_slide(
-            s9, "研究计划及预期成果",
+        s9 = new_content_slide(
+            prs, "研究计划及预期成果",
             "分阶段推进计划（2026.11–2027.10）与预期成果",
             page_num=9,
         )
@@ -393,7 +383,8 @@ def build_example_presentation():
         # ------------------------------------------------------------------ #
         # P10 致谢
         # ------------------------------------------------------------------ #
-        format_thanks_slide(prs.slides[9])
+        new_thanks_slide(prs)
+        assert len(prs.slides) == 10
 
         # 全量守门 + 暂存写回
         enforce_min_18pt_all_slides(prs)
