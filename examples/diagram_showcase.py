@@ -65,7 +65,7 @@ def curve(w, h, path):
                                 tju_line_styles(markersize=5)):
         ax.plot(x, base + 0.25 * np.exp(-x / 9) + rng.normal(0, 0.004, len(x)), label=name, **st)
     ax.set_xlabel("时间 / s")
-    ax.set_ylabel("横向误差 / m")
+    ax.set_ylabel("误差 / m")
     ax.set_ylim(0, 0.45)
     ax.legend(ncol=1, loc="center left", bbox_to_anchor=(1.0, 0.5), handlelength=1.6)
     return save_tju_figure(fig, path)
