@@ -8,7 +8,7 @@ TJU-PPT 原生可编辑流程图组件 (tju_native_diagrams.py)
 - add_flow_pipeline             : N 步横向/纵向流程（输入浅蓝 → 核心深蓝 → 输出红框）
 - add_feedback_loop             : 前向链 + 底部回环反馈箭头（闭环控制 / 迭代优化）
 - add_layered_architecture      : 分层系统架构（左侧深蓝层名 + 右侧浅蓝模块行 + 层间箭头）
-- text_width_in / check_box_fit : 18 pt 字宽预算，生成阶段提前发现溢出
+- check_box_fit                 : 18 pt 字宽预算（tju_theme.text_width_in），生成阶段提前发现溢出
 
 设计约束（与 SKILL.md 一致）：
 - 只用 #00337F / #EAF1FB / #C00000 / #000000 / #FFFFFF；所有文字 >= 18 pt，经 append_rich_text 写入四槽位字体。
@@ -16,7 +16,6 @@ TJU-PPT 原生可编辑流程图组件 (tju_native_diagrams.py)
 """
 
 import math
-import re
 import warnings
 
 from lxml import etree
@@ -25,12 +24,8 @@ from pptx.enum.text import PP_ALIGN
 from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
-from ppt_builder_helpers import (
-    C_BLACK, C_BLUE, C_BLUE_LIGHT, C_RED, C_WHITE,
-    add_solid_box, add_text_block,
-)
-
-_MARKUP = re.compile(r"[_^]\{([^{}]*)\}")
+from tju_components import add_solid_box, add_text_block  # noqa: F401
+from tju_theme import C_BLACK, C_BLUE, C_BLUE_LIGHT, C_RED, C_WHITE, text_width_in  # noqa: F401
 
 # 角色 → (填充, 边框, 文字颜色, 边框粗细 pt)
 ROLE_STYLES = {
@@ -40,28 +35,6 @@ ROLE_STYLES = {
     "emphasis": (C_RED, C_RED, C_WHITE, 1.5),
     "plain": (C_WHITE, C_BLUE, C_BLACK, 1.5),
 }
-
-
-# --------------------------------------------------------------------------- #
-# 字宽预算
-# --------------------------------------------------------------------------- #
-def _char_em(ch):
-    o = ord(ch)
-    if (0x2E80 <= o <= 0x9FFF) or (0xF900 <= o <= 0xFAFF) or (0xFF00 <= o <= 0xFFEF) or (0x3000 <= o <= 0x303F):
-        return 1.0
-    if ch == " ":
-        return 0.25
-    if ch.isupper():
-        return 0.70
-    if ch.isdigit() or ch.islower():
-        return 0.52
-    return 0.38
-
-
-def text_width_in(text, pt=18):
-    """估算一行文字在 pt 字号下的宽度（英寸）。_{}/^{} 标记按正文字宽计（与 append_rich_text 一致）。"""
-    plain = _MARKUP.sub(r"\1", text)
-    return sum(_char_em(c) for c in plain) * pt / 72.0
 
 
 def _item_to_text(item):

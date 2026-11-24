@@ -31,7 +31,9 @@ import matplotlib.pyplot as plt
 from matplotlib import font_manager
 from matplotlib.colors import LinearSegmentedColormap
 
-BLUE, BLUE_LIGHT, RED, BLACK, WHITE = "#00337F", "#EAF1FB", "#C00000", "#000000", "#FFFFFF"
+from tju_theme import HEX_BLACK, HEX_BLUE, HEX_BLUE_LIGHT, HEX_RED, HEX_WHITE
+
+BLUE, BLUE_LIGHT, RED, BLACK, WHITE = (f"#{h}" for h in (HEX_BLUE, HEX_BLUE_LIGHT, HEX_RED, HEX_BLACK, HEX_WHITE))
 _CJK = re.compile(r"[\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef\u3000-\u303f]")
 _MPL_VER = tuple(int(x) for x in re.findall(r"\d+", matplotlib.__version__)[:2])
 
@@ -137,7 +139,9 @@ def apply_tju_style(base_pt=18, tick_pt=16, legend_pt=16):
 
 def new_figure(width_in, height_in, nrows=1, ncols=1, **kw):
     """按 PPT 放置框尺寸建图（constrained_layout 自动避让标签）。"""
-    return plt.subplots(nrows, ncols, figsize=(width_in, height_in), constrained_layout=True, **kw)
+    fig, ax = plt.subplots(nrows, ncols, figsize=(width_in, height_in), constrained_layout=True, **kw)
+    fig.set_constrained_layout_pads(w_pad=0.14, h_pad=0.08)   # keep rotated labels off the panel border
+    return fig, ax
 
 
 def _assign_fonts(fig):

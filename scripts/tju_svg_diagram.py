@@ -27,7 +27,10 @@ import shutil
 import subprocess
 import sys
 
-BLUE, BLUE_LIGHT, RED, BLACK, WHITE = "#00337F", "#EAF1FB", "#C00000", "#000000", "#FFFFFF"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from tju_theme import HEX_BLACK, HEX_BLUE, HEX_BLUE_LIGHT, HEX_RED, HEX_WHITE  # noqa: E402
+
+BLUE, BLUE_LIGHT, RED, BLACK, WHITE = (f"#{h}" for h in (HEX_BLUE, HEX_BLUE_LIGHT, HEX_RED, HEX_BLACK, HEX_WHITE))
 LINE_COLORS = {"blue": BLUE, "red": RED, "black": BLACK}
 
 # 角色 → (填充, 边框, 文字, 边框宽 px@96ppi)
@@ -121,11 +124,57 @@ def _measure_run(text, px, cjk):
     return em * px
 
 
+_CMAPS = None
+
+
+def _cmap_of(path):
+    """Unicode code points covered by a font file (first face of a .ttc); None if unknown."""
+    if not path:
+        return None
+    try:
+        from fontTools.ttLib import TTCollection, TTFont
+        font = TTCollection(path).fonts[0] if path.lower().endswith(".ttc") else TTFont(path, lazy=True)
+        return set(font.getBestCmap() or {})
+    except Exception:
+        return None
+
+
+def _cmaps():
+    global _CMAPS
+    if _CMAPS is None:
+        _CMAPS = (_cmap_of(LATIN_FILE), _cmap_of(CJK_FILE))
+    return _CMAPS
+
+
+def _route_cjk(ch):
+    """True → render with the CJK font.  Symbols missing from Times New Roman (e.g. ‖ U+2016) are routed to
+    the CJK font when it has the glyph, so they never become tofu boxes."""
+    if _is_cjk(ch):
+        return True
+    if ord(ch) < 0x80:
+        return False
+    lat, cjk = _cmaps()
+    return lat is not None and ord(ch) not in lat and cjk is not None and ord(ch) in cjk
+
+
+def missing_glyphs(text):
+    """Characters that neither resolved font can draw (would render as tofu)."""
+    lat, cjk = _cmaps()
+    out = []
+    for ch in _MARKUP.sub(lambda m: m.group(0)[2:-1], str(text)):
+        if not ch.strip():
+            continue
+        table = cjk if _route_cjk(ch) else lat
+        if table is not None and ord(ch) not in table:
+            out.append(ch)
+    return sorted(set(out))
+
+
 def _split_script(text):
-    """按 CJK / 西文切分成 [(text, is_cjk), ...]"""
+    """按 CJK / 西文切分成 [(text, is_cjk), ...]（按字形可用性路由字体）"""
     runs = []
     for ch in text:
-        c = _is_cjk(ch)
+        c = _route_cjk(ch)
         if runs and runs[-1][1] == c:
             runs[-1][0] += ch
         else:
@@ -530,6 +579,10 @@ class TjuDiagram:
         all_text += [(f"group label", g["label"]) for g in self.groups if g["label"]]
         all_text += [(f"text", t["content"]) for t in self.texts]
         for where, txt in all_text:
+            miss = missing_glyphs(txt)
+            if miss:
+                issues.append(f"{where}: no glyph for {''.join(miss)!r} in {LATIN_FAMILY} or {CJK_FAMILY} "
+                              f"(renders as tofu) — rephrase, or put the symbol in native OMML on the slide")
             if _COMBINING.search(str(txt)):
                 issues.append(f"{where}: combining accent in {txt!r} — cairosvg cannot compose it (renders as tofu). "
                               f"Put hatted symbols in native OMML on the slide, or rephrase (e.g. '预测扰动 d_{{k+N}}').")
@@ -607,6 +660,21 @@ class TjuDiagram:
                 for nid, n in self.nodes.items():
                     if _rect_overlap(tb, (n["x"], n["y"], n["w"], n["h"]), tol=1.0):
                         issues.append(f"text {t['content']!r} overlaps node {nid!r}")
+        group_labels = []
+        for g in self.groups:
+            if g["label"]:
+                lw = line_width_px(g["label"], g["px"]) + 0.16 * PPI
+                group_labels.append((g["label"], (g["x"] + 0.06 * PPI, g["y"] + 0.03 * PPI, lw, g["px"] * 1.2)))
+        for glabel, gb in group_labels:
+            for e in self.edges:
+                if e["src"] not in self.nodes or e["dst"] not in self.nodes:
+                    continue
+                pts = self._route(e)
+                if any(_seg_hits_rect(p, q, gb, pad=0.0) for p, q in zip(pts[:-1], pts[1:])):
+                    issues.append(f"edge {e['src']}->{e['dst']} crosses group label {glabel!r}")
+            for a in self.arrows:
+                if any(_seg_hits_rect(p, q, gb, pad=0.0) for p, q in zip(a["pts"][:-1], a["pts"][1:])):
+                    issues.append(f"free arrow crosses group label {glabel!r}")
         for g in self.groups:
             if g["x"] < -0.5 or g["y"] < -0.5 or g["x"] + g["w"] > self.W + 0.5 or g["y"] + g["h"] > self.H + 0.5:
                 issues.append(f"out of canvas: group {g['label']!r}")
