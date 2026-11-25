@@ -12,13 +12,30 @@ Layout recipes for each page type are in `page_recipes.md`.
 ## S2. Academic register, low entry barrier
 - Lower the barrier by **defining** the correct term once (picture or one line), then reuse it. Never
   replace terms with slang or metaphors.
-- Every printed sentence must be acceptable in the written report. Spoken script may be warmer, still
-  academic.
+- Printed text is short and plain: a phrase a professor from the next lab understands at first read. It need
+  not be a full report sentence, but it must not be telegraphic shorthand only you can expand
+  (`静态顶吸无残垛` → `仅静态吸取，无残垛`). Spoken script may be warmer, still academic.
 - Name things the way a thesis does: `研究内容一/二/三` (not 工作一/二/三), `任务中断` (not 卡壳),
   `难以求解 / 方法失效` (not 搞不定), the device's formal name (not the workshop nickname).
 - Use neutral labels: 问题 / 方法 / 局限 / 借鉴 / 判据 / 优势 / 预期收益. No exclamation marks, no
   `（最快）`-style superlatives, no emoji. `tju_audit.py --content` lists the common offenders with replacements.
 - Quantify instead of dramatising: `厘米级偏移`, not `歪几厘米`.
+
+## S2b. Plain, not defensive
+Write what the work does, directly.  Text written to pre-empt objections reads as AI-generated and hides the idea.
+- **State scope once.** Say which modules are reused (perception, low-level control) on the overview page; do
+  not repeat `复用既有… / 直接调用既有…` on every later page.
+- **No revision history on slides.** Notes such as `（去 VLA/ACT）`, `吸收…`, `不再…` tell the advisor what changed;
+  the committee never saw the old version.  Put change notes in the speech or the reply to the advisor.
+- **No hedge stacks or pre-emptive rebuttals.** One calibrated verb is enough (`降低`, `提高`); avoid
+  `有望…并…`, `区别于…` straw men, and conditions stuffed into the first clause (`同一底层下相较…`).
+- **Everyday technical words over packaged jargon.** Prefer the plain name of the mechanism
+  (`状态编码`, `按需调用`, `每包耗时`) over coined or lab-internal labels (`前缀编码`, `双态唤醒`, `节拍`,
+  group project names, configuration codes such as `(11-10-9)×12`).  If a code or project name is necessary,
+  define it once on the slide where it first appears.
+- **One name per mechanism.** Pick one term and keep it on every page, figure, and the script.
+- Implementation detail (bit widths, engine names, loss tricks) stays in the speech or report unless it is the
+  contribution itself.
 
 ## S3. Story arc
 | Step | Audience question | Pages (recipes in page_recipes.md) |
@@ -72,7 +89,8 @@ Layout recipes for each page type are in `page_recipes.md`.
 ## S9. Innovation, feasibility, plan
 - Innovations: summarise `问题 → 方法` and must not introduce unmentioned topics. Count follows substance —
   for a master's thesis usually **2** (1–3), and they need not map 1:1 onto the research contents. Write each
-  as `针对……问题，区别于……，提出……，有望……` in ≤ 2 lines.
+  in 1–2 plain sentences: what is new and what it enables.  Contrast with prior work only when the difference
+  is not obvious, and at most once; do not use a fixed `针对……区别于……提出……有望……` template.
 - Feasibility = **研究条件** (hardware, software, data, compute) + **研究基础** (prior algorithms and engineering
   work of the group and yourself). Parameter tables and constraint lists do not belong here.
 - Plan: dated phases consistent with the degree schedule + measurable outcomes (`指标 + 基线 + 方向`).

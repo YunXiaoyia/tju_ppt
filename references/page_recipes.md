@@ -64,13 +64,13 @@ where each family fails in your setting · `takeaway` = the gap.  This page answ
 `挑战 → 研究内容` mapping (native boxes + connectors, editable), right a compact closed-loop/system figure
 panel marking reused vs new modules.
 
-**研究内容 N (one page each)** — `lead` = 3 lines, one per sub-content (label + one sentence; mark the key
-one red) · body `split(2)` → two figure panels (method schematic + mechanism/flow or expected-result plot),
+**研究内容 N (one page each)** — `lead` = 3 lines, one per sub-content (label + one plain sentence saying
+what is done; mark the key one red; no reuse disclaimers — scope is stated on the overview) · body `split(2)` → two figure panels (method schematic + mechanism/flow or expected-result plot),
 or a panel + a card/equation column · `takeaway` = what this content delivers.  Subtitle begins with
 `研究内容一：`.  Never split one content over (上)/(下) pages.
 
-**拟创新点** — 2 cards, header `创新点一：<短名>`, body `针对……，区别于……，提出……，有望……`
-(one sentence, or four labelled one-line items 问题/区别/方法/预期) · size the cards with `card_height()`
+**拟创新点** — 2 cards, header `创新点一：<短名>`, body 1–2 plain sentences: what is new and what it enables
+(optionally labelled one-line items 问题/方法/效果; see story.md S2b) · size the cards with `card_height()`
 (stacked full-width or `split(2)` side by side) and give the rest of the body to a native
 `问题 → 方法 → 预期` strip or a figure — never stretch a 1–2-line card over half the page · `takeaway` optional.
 

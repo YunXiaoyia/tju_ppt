@@ -18,7 +18,8 @@ ISSUES (must be 0 before presenting) — audit_pptx():
 WARNINGS (judgment calls; fix or justify) — audit_content():
   density, slide without visual (picture / chart / native diagram / table), estimated text overflow, table rows growing past their declared height,
   panel/card nested inside a dashed container, inconsistent takeaway size, >1 takeaway on a slide,
-  colloquial / non-standard terms (with suggested replacement), unproven absolutes, first use of acronyms.
+  colloquial / non-standard terms (with suggested replacement), unproven absolutes, first use of acronyms,
+  revision notes like （去 X）, template innovation sentence 针对…区别于…提出…, scope disclaimer on ≥ 3 slides.
 IMAGES — audit_image_palette(): self-drawn figures use only TJU colors (anti-aliasing tolerated).
 """
 
@@ -314,6 +315,10 @@ TERM_HINTS = {
     "抓不准": "定位误差大", "草稿台": "", "算总账": "", "为什么难": "难点",
     "（最快）": "", "（最灵活）": "", "（最稳妥）": "", "！": "", "!": "",
 }
+# defensive / revision-history patterns (warnings; see story.md S2b)
+_REVISION_NOTE = re.compile(r"[（(]\s*去\s*[A-Za-z\u4e00-\u9fff/]+[）)]")
+_TEMPLATE_INNOV = re.compile(r"针对.{2,40}区别于.{2,40}提出")
+SCOPE_WORDS = ("复用既有", "调用既有", "既有控制", "既有感知", "沿用既有")
 ABSOLUTE_WORDS = ("彻底", "杜绝", "100%", "100 %", "完美", "零误差", "绝对可靠", "绝对安全", "绝对最优", "永不")
 _ACRONYM = re.compile(r"(?<![A-Za-z0-9\-])([A-Z][A-Za-z0-9]*(?:-[A-Z][A-Za-z0-9]*)*)(?![A-Za-z0-9\-])")
 _COMMON_ACRONYMS = {
@@ -419,7 +424,7 @@ def audit_content(path, skip_slides=(), max_units=160, known=()):
     from pptx import Presentation
 
     prs = Presentation(path)
-    warns, seen_acr, takeaway_sizes = [], set(known), {}
+    warns, seen_acr, takeaway_sizes, scope_pages = [], set(known), {}, []
     for idx, slide in enumerate(prs.slides, start=1):
         if idx in skip_slides:
             continue
@@ -460,6 +465,14 @@ def audit_content(path, skip_slides=(), max_units=160, known=()):
         for term, repl in TERM_HINTS.items():
             if term in text:
                 warns.append(f"slide {idx}: non-academic term {term!r}" + (f" → use {repl!r}" if repl else " — rephrase"))
+        m = _REVISION_NOTE.search(text)
+        if m:
+            warns.append(f"slide {idx}: revision note {m.group(0)!r} on the slide — the committee never saw the old "
+                         f"version; move it to the speech")
+        if _TEMPLATE_INNOV.search(text.replace("\n", "")):
+            warns.append(f"slide {idx}: template sentence 针对…区别于…提出… — say plainly what is new and what it enables")
+        if any(w in text for w in SCOPE_WORDS):
+            scope_pages.append(idx)
         for w in ABSOLUTE_WORDS:
             if w in text:
                 warns.append(f"slide {idx}: absolute claim {w!r} — prove it or soften")
@@ -468,6 +481,8 @@ def audit_content(path, skip_slides=(), max_units=160, known=()):
         seen_acr.update(new_acr)
         if new_acr:
             warns.append(f"slide {idx}: first use of {', '.join(new_acr)} — define before use")
+    if len(scope_pages) >= 3:
+        warns.append(f"deck: reuse/scope disclaimer repeated on slides {scope_pages} — state it once on the overview")
     if len(takeaway_sizes) > 1:
         detail = "; ".join(f"{pt:g} pt on {pages}" for pt, pages in sorted(takeaway_sizes.items()))
         warns.append(f"deck: takeaway lines use different sizes ({detail}) — use one size everywhere")

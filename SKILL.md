@@ -61,6 +61,8 @@ Not for: Beamer (`paper-slides`), posters (`paper-poster`), SVG-first decks (`pp
 - One message per page; body text far below what is spoken (audit warns > 160 units).
 - Every content page has a visual; ≤ 2–3 core formulas in the whole talk.
 - Thesis vocabulary: 研究内容一/二/三, 任务中断, formal device names; no slang or absolutes.
+- Plain, not defensive (`story.md` S2b): state reuse/scope once, no revision notes like `（去 X）`, no hedge
+  stacks or straw-man contrasts, no lab-internal codes or coined labels; one name per mechanism.
 - One frame level: never put a panel or card inside a dashed box.
 - Innovations follow substance (master's: usually 2), not one per research content.
 - Feasibility = 研究条件 + 研究基础; no parameter tables there.
@@ -77,6 +79,8 @@ misalignment the advisor complained about.
 | "`add_image_fit` is close enough under the header" | Redraw at `figure_slot()` size, or `fit="crop"` for photos |
 | "A dashed box around the cards looks tidy" | Drop it; the cards already have frames |
 | "Three contents → three innovations" | Write the 1–2 that are genuinely new |
+| "Add `（去 VLA）` / `复用既有…` so nobody thinks we overclaim" | State scope once on the overview; change notes go in the speech |
+| "Compress the phrase so it fits one line" | Rewrite in plain words or give it more room; shorthand nobody can expand is not shorter |
 | "Split 研究内容二 into (上)/(下)" | Condense to one page; detail goes to the speech |
 | "Skip pages 1,2 in the audit" for a partial deck | `--skip` lists only cover/TOC/divider/reference/thanks pages; `Deck.save` computes it |
 

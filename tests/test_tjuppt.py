@@ -119,6 +119,18 @@ class AuditTests(unittest.TestCase):
         self.assertFalse(any("first use of RL" in x for x in w), w)   # defined in place
 
 
+    def test_defensive_wording_warnings(self):
+        d = Deck()
+        for i in range(3):
+            p = d.content("t", f"研究内容{i}：复用既有感知结果")
+        add_text_block(p.slide, GRID_L, 2.0, 12.0, 0.5, ["输出动作，直接调用既有控制（去 VLA/ACT）"])
+        add_text_block(p.slide, GRID_L, 3.0, 12.0, 0.5, ["针对规则失效问题，区别于静态查表，提出新方法"])
+        w = audit_content(save(d, "defensive.pptx"))
+        self.assertTrue(any("revision note" in x for x in w), w)
+        self.assertTrue(any("template sentence" in x for x in w), w)
+        self.assertTrue(any("disclaimer repeated" in x for x in w), w)
+
+
 class FigureTests(unittest.TestCase):
     def test_edge_crossing_group_label(self):
         from tju_svg_diagram import TjuDiagram
