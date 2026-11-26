@@ -27,8 +27,11 @@ Write what the work does, directly.  Text written to pre-empt objections reads a
   not repeat `复用既有… / 直接调用既有…` on every later page.
 - **No revision history on slides.** Notes such as `（去 VLA/ACT）`, `吸收…`, `不再…` tell the advisor what changed;
   the committee never saw the old version.  Put change notes in the speech or the reply to the advisor.
-- **No hedge stacks or pre-emptive rebuttals.** One calibrated verb is enough (`降低`, `提高`); avoid
-  `有望…并…`, `区别于…` straw men, and conditions stuffed into the first clause (`同一底层下相较…`).
+- **No hedge stacks or pre-emptive rebuttals.** One calibrated verb is enough (`降低`, `提高`); avoid stacking
+  `有望…并…`, straw-man contrasts, and conditions stuffed into the first clause (`同一底层下相较…`).  The
+  innovation sentence form in S9 is the one place where `区别于 / 有望` is expected.
+- **Research-content sub-items start with `研究`** (`研究……方法 / 研究……机制`), name the research question, and
+  carry no citations; engineering labels such as `输出形式 / 接口` are not research contents.
 - **Everyday technical words over packaged jargon.** Prefer the plain name of the mechanism
   (`状态编码`, `按需调用`, `每包耗时`) over coined or lab-internal labels (`前缀编码`, `双态唤醒`, `节拍`,
   group project names, configuration codes such as `(11-10-9)×12`).  If a code or project name is necessary,
@@ -89,8 +92,9 @@ Write what the work does, directly.  Text written to pre-empt objections reads a
 ## S9. Innovation, feasibility, plan
 - Innovations: summarise `问题 → 方法` and must not introduce unmentioned topics. Count follows substance —
   for a master's thesis usually **2** (1–3), and they need not map 1:1 onto the research contents. Write each
-  in 1–2 plain sentences: what is new and what it enables.  Contrast with prior work only when the difference
-  is not obvious, and at most once; do not use a fixed `针对……区别于……提出……有望……` template.
+  in the committee's standard form `针对……问题，区别于已有的……，提出了……，有望……` (advisor-required), filled with
+  plain words: a concrete problem, one real prior approach (not a straw man), the method by its plain name, and one
+  measurable expected effect; ≤ 3 lines.
 - Feasibility = **研究条件** (hardware, software, data, compute) + **研究基础** (prior algorithms and engineering
   work of the group and yourself). Parameter tables and constraint lists do not belong here.
 - Plan: dated phases consistent with the degree schedule + measurable outcomes (`指标 + 基线 + 方向`).

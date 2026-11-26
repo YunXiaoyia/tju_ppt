@@ -64,7 +64,10 @@ Not for: Beamer (`paper-slides`), posters (`paper-poster`), SVG-first decks (`pp
 - Plain, not defensive (`story.md` S2b): state reuse/scope once, no revision notes like `（去 X）`, no hedge
   stacks or straw-man contrasts, no lab-internal codes or coined labels; one name per mechanism.
 - One frame level: never put a panel or card inside a dashed box.
-- Innovations follow substance (master's: usually 2), not one per research content.
+- Innovations follow substance (master's: usually 2), not one per research content; write them as
+  `针对……问题，区别于已有的……，提出了……，有望……` in plain words.
+- Research-content pages: three sub-items starting with `研究…`, no citations.
+- References fit on one page (the only page allowed below 18 pt).
 - Feasibility = 研究条件 + 研究基础; no parameter tables there.
 - Same names and numbers across overview, content pages, innovations, script, and report.
 

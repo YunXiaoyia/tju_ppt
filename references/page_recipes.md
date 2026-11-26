@@ -64,13 +64,14 @@ where each family fails in your setting · `takeaway` = the gap.  This page answ
 `挑战 → 研究内容` mapping (native boxes + connectors, editable), right a compact closed-loop/system figure
 panel marking reused vs new modules.
 
-**研究内容 N (one page each)** — `lead` = 3 lines, one per sub-content (label + one plain sentence saying
-what is done; mark the key one red; no reuse disclaimers — scope is stated on the overview) · body `split(2)` → two figure panels (method schematic + mechanism/flow or expected-result plot),
+**研究内容 N (one page each)** — `lead` = 3 lines, one per sub-content: label starts with `研究`
+(`研究……方法：`), then one plain sentence; mark the key one red; no citations and no reuse disclaimers on
+research-content pages (citations belong on related-work pages) · body `split(2)` → two figure panels (method schematic + mechanism/flow or expected-result plot),
 or a panel + a card/equation column · `takeaway` = what this content delivers.  Subtitle begins with
 `研究内容一：`.  Never split one content over (上)/(下) pages.
 
-**拟创新点** — 2 cards, header `创新点一：<短名>`, body 1–2 plain sentences: what is new and what it enables
-(optionally labelled one-line items 问题/方法/效果; see story.md S2b) · size the cards with `card_height()`
+**拟创新点** — 2 cards, header `创新点一：<短名>`, body `针对……问题，区别于已有的……，提出了……，有望……`
+in plain words (story.md S9), highlight the `提出了…` part · size the cards with `card_height()`
 (stacked full-width or `split(2)` side by side) and give the rest of the body to a native
 `问题 → 方法 → 预期` strip or a figure — never stretch a 1–2-line card over half the page · `takeaway` optional.
 
@@ -79,6 +80,9 @@ or a panel + a card/equation column · `takeaway` = what this content delivers. 
 (`vsplit(3)` small cards, one line each) · `takeaway` optional.  No parameter/constraint tables on this page.
 
 **研究计划与预期成果** — `add_table` (时间 / 任务 / 成果) + a short measurable-outcome card if space allows.
+
+**参考文献** — one page; one reference per line, numbered in citation order, ≥ 9 pt (the only page exempt
+from 18 pt; list it in `--skip`).  Do not split references across several pages.
 
 **目录 / 章节过渡** — `deck.toc(items, active=k)`; **封面 / 致谢** — `deck.cover(...)`, `deck.thanks()`.
 

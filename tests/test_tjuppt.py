@@ -124,10 +124,11 @@ class AuditTests(unittest.TestCase):
         for i in range(3):
             p = d.content("t", f"研究内容{i}：复用既有感知结果")
         add_text_block(p.slide, GRID_L, 2.0, 12.0, 0.5, ["输出动作，直接调用既有控制（去 VLA/ACT）"])
-        add_text_block(p.slide, GRID_L, 3.0, 12.0, 0.5, ["针对规则失效问题，区别于静态查表，提出新方法"])
+        p2 = d.content("t", "研究内容二：调度方法")
+        add_text_block(p2.slide, GRID_L, 3.0, 12.0, 0.5, ["研究状态编码方法：参考场景图 [5]"])
         w = audit_content(save(d, "defensive.pptx"))
         self.assertTrue(any("revision note" in x for x in w), w)
-        self.assertTrue(any("template sentence" in x for x in w), w)
+        self.assertTrue(any("citation on a research-content page" in x for x in w), w)
         self.assertTrue(any("disclaimer repeated" in x for x in w), w)
 
 
