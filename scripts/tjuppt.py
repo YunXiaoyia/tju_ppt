@@ -28,3 +28,8 @@ from tju_deck import (  # noqa: F401
     format_cover_slide, format_thanks_slide, format_toc_slide, get_tju_layout, new_content_slide,
     new_cover_slide, new_thanks_slide, new_toc_slide, rearrange_slides, save_staged_pptx, setup_tju_content_slide,
 )
+from tju_native_diagrams import (  # noqa: F401
+    add_connector, add_diagram_group, add_diagram_label, add_feedback_loop, add_flow_pipeline,
+    add_junction_dot, add_layered_architecture, add_native_panel, add_pill, add_polyline_arrow,
+    add_role_box, add_timeline, connect_boxes,
+)

@@ -4,21 +4,37 @@ Four self-contained routes, no external skill needed.  Required packages: `pytho
 route C adds `cairosvg` (and `fontTools` for glyph checks), route D adds `matplotlib` (≥ 3.6 for mixed
 CJK/Latin labels).
 
-## 1. Route selection
+## 1. Route selection — Native Editable First
+
+**Default rule:** If a diagram can be expressed with boxes, rounded pills, grouping frames, dots, labels, and
+straight/orthogonal arrows, **always build it natively in PowerPoint with `tju_native_diagrams`** (all exported
+from `tjuppt`).  Never paste a static PNG/SVG image for an ordinary flowchart, system architecture, closed loop,
+challenge-to-content map, timeline, or bottom summary strip — advisors expect to click and edit diagram text
+directly in PowerPoint.
 
 | Need | Route | Tool | Editable in PowerPoint |
 |---|---|---|---|
-| ≤ 6-step linear flow | A1 | `add_flow_pipeline(slide, *region.box, steps)` | yes |
-| Closed loop / iterative training | A2 | `add_feedback_loop(slide, *region.box, steps, "反馈说明")` | yes |
-| Layered architecture | A3 | `add_layered_architecture(slide, *region.box, [(层, [模块…]), …])`, `!` prefix = new module | yes |
-| Mapping (挑战 → 研究内容), arbitrary links | A4 | `add_role_box` + `connect_boxes` | yes |
-| Multi-branch roadmap, grouped modules, algorithm block diagram, timeline | C | `TjuDiagram` (`tju_svg_diagram.py`) → SVG + PNG | no (keep script + `.svg`) |
-| Curves, bars, ablations, heatmaps | D | `tju_plot_style.py` | no (keep script + data) |
-| Sequence / state diagram, only if `mmdc` exists | M | `mmdc -c references/tju_mermaid_theme.json` | no |
-| Real photos, GIFs, cited paper figures | — | `add_figure_panel(..., fit="crop")` / `add_picture_exact` | — |
+| Titled native diagram panel (replaces `add_figure_panel` for block diagrams) | **A0 (default)** | `add_native_panel(slide, region, "标题", framed=True)` | **yes** |
+| Linear / vertical flow (≤ 6 steps) | **A1 (default)** | `add_flow_pipeline(slide, *r.box, steps, direction="h"/"v")` | **yes** |
+| Closed loop / feedback iteration | **A2 (default)** | `add_feedback_loop(slide, *r.box, steps, "反馈说明")` | **yes** |
+| Layered system architecture | **A3 (default)** | `add_layered_architecture(slide, *r.box, [(层, [模块…]), …])` | **yes** |
+| Grouped multi-module architecture / arbitrary topology | **A4 (default)** | `add_diagram_group` + `add_role_box` + `add_pill` + `add_junction_dot` + `add_diagram_label` + `connect_boxes` / `add_polyline_arrow` | **yes** |
+| Method-evolution timeline | **A5 (default)** | `add_timeline(slide, region, [(year, title, desc, role), …])` or diagonal `add_connector` + `add_role_box` | **yes** |
+| Real photos, GIFs, cited paper figures | — | `add_figure_panel(..., fit="crop")` / `add_picture_exact` | media |
+| Data curves, bars, ablations, heatmaps | D | `tju_plot_style.py` (Matplotlib) | data plot |
+| Complex non-box geometry, curved schematics, dense custom vector art that native shapes cannot express | C *(fallback only)* | `TjuDiagram` (`tju_svg_diagram.py`) → SVG + PNG | no (keep script + `.svg`) |
+| Sequence / state diagram, only if `mmdc` exists and A cannot express it | M *(fallback only)* | `mmdc -c references/tju_mermaid_theme.json` | no |
 
-Prefer A when it can express the figure (the advisor can edit text directly).  Switch to C when lines must
-detour, groups are needed, or ≥ 3 edges enter one node.
+**Native diagram typography & framing contract:**
+- Shapes built by `tju_native_diagrams` are tagged with `Diagram:` in their shape name and strip default theme
+  drop shadows automatically (`no_theme_effects`).
+- Keep text inside native diagram boxes at **16–18 pt** wherever possible (`≥ 16 pt` for full-slide system
+  architectures); compact milestone/timeline cards may go down to **`MIN_DIAGRAM_PT = 14 pt`**.  Never shrink
+  regular slide body text (`MIN_PT = 18 pt`).
+- Use `add_diagram_group` (unfilled dashed rounded frame) for visual grouping — never place a solid filled
+  background rectangle behind boxes (which triggers overlap audit errors).
+- Keep palette restrained (≤ 3 colors: deep blue `#00337F`, ice-blue tint `#EAF1FB`, restrained red `#C00000`
+  only for focal triggers/constraints — never shout a secondary module in bright red).
 
 ## 2. Draw at slot size (the alignment rule)
 

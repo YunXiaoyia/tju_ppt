@@ -37,7 +37,9 @@ FONT_LATIN = "Times New Roman"
 FONT_CJK = "微软雅黑"
 FONT_SLOTS = (("a:latin", FONT_LATIN), ("a:ea", FONT_CJK), ("a:cs", FONT_LATIN), ("a:sym", FONT_LATIN))
 
-MIN_PT = 18          # every visible run on a slide (raster figure internals excepted)
+MIN_PT = 18          # every visible body run on a slide (native Diagram:* shapes allow MIN_DIAGRAM_PT)
+MIN_DIAGRAM_PT = 14  # minimum font size inside native editable diagram shapes (prefer 16-18 pt)
+DIAGRAM_PREFIX = "Diagram:"
 PT_BANNER = 28       # white text in the dark-blue top banner
 PT_SUBTITLE = 20     # blue claim sentence under the banner
 PT_HEADING = 19      # column / card / panel headings

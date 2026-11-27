@@ -34,7 +34,8 @@ from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tju_theme import (  # noqa: E402
-    ALLOWED_HEX, GRID_L, GRID_R, HEX_BLUE, HEX_RED, PT_BODY, lines_needed, text_width_in,
+    ALLOWED_HEX, DIAGRAM_PREFIX, GRID_L, GRID_R, HEX_BLUE, HEX_RED, MIN_DIAGRAM_PT, MIN_PT, PT_BODY,
+    lines_needed, text_width_in,
 )
 
 EMU = 914400.0
@@ -156,13 +157,24 @@ def _is_takeaway(sh):
             and paras[0].alignment is not None and int(paras[0].alignment) == 2)   # PP_ALIGN.CENTER
 
 
-def _check_rpr(issues, idx, rpr, text, kind):
+def _is_diagram_element(el):
+    """True when `el` sits inside a shape whose cNvPr name starts with DIAGRAM_PREFIX ('Diagram:')."""
+    cur = el
+    while cur is not None:
+        if isinstance(cur.tag, str) and cur.tag.endswith("}sp"):
+            cNvPr = cur.find(f"{_P}nvSpPr/{_P}cNvPr")
+            return cNvPr is not None and (cNvPr.get("name") or "").startswith(DIAGRAM_PREFIX)
+        cur = cur.getparent()
+    return False
+
+
+def _check_rpr(issues, idx, rpr, text, kind, min_sz=MIN_PT * 100):
     if rpr is None:
         issues.append(f"slide {idx}: {kind} without rPr {text[:20]!r}")
         return
     sz = rpr.get("sz")
-    if sz is None or int(sz) < 1800:
-        issues.append(f"slide {idx}: {kind} size {sz} < 1800 in {text[:20]!r}")
+    if sz is None or int(sz) < min_sz:
+        issues.append(f"slide {idx}: {kind} size {sz} < {min_sz} in {text[:20]!r}")
     if rpr.get("b") != "1":
         issues.append(f"slide {idx}: {kind} not bold {text[:20]!r}")
     missing = [t for t in ("latin", "ea", "cs", "sym") if rpr.find(f"{_A}{t}") is None]
@@ -268,7 +280,8 @@ def audit_pptx(path, skip_slides=(), overlap_tol=TOL, check_overlap=True):
                 m = _RAW_MATH.search(text)
                 if m:
                     issues.append(f"slide {idx}: raw ASCII math {m.group(1)!r} in {text[:30]!r} (use _{{}}/^{{}})")
-            _check_rpr(issues, idx, r.find(f"{_A}rPr"), text, "run")
+            min_sz = MIN_DIAGRAM_PT * 100 if _is_diagram_element(r) else MIN_PT * 100
+            _check_rpr(issues, idx, r.find(f"{_A}rPr"), text, "run", min_sz=min_sz)
         for mr in root.iter(f"{_M}r"):
             if _ancestor_tag(mr, "}Fallback"):
                 continue
@@ -329,10 +342,12 @@ _COMMON_ACRONYMS = {
 _WIDE = re.compile(r"[\u2E80-\u9FFF\uFF00-\uFFEF\u3000-\u303F]")
 
 
-def _slide_text(slide, body_only=False):
+def _slide_text(slide, body_only=False, exclude_diagrams=False):
     parts = []
     for sh in slide.shapes:
         if body_only and _is_header_zone(sh):
+            continue
+        if exclude_diagrams and (sh.name or "").startswith(DIAGRAM_PREFIX):
             continue
         if sh.has_text_frame:
             parts.append(sh.text_frame.text)
@@ -349,6 +364,8 @@ def _has_visual(slide):
     from pptx.enum.shapes import MSO_SHAPE_TYPE
     for sh in slide.shapes:
         if sh.shape_type in (MSO_SHAPE_TYPE.PICTURE, MSO_SHAPE_TYPE.CHART) or sh._element.tag.endswith("}cxnSp"):
+            return True
+        if (sh.name or "").startswith(DIAGRAM_PREFIX):
             return True
         if getattr(sh, "has_table", False) and sh.has_table:
             return True
@@ -429,7 +446,7 @@ def audit_content(path, skip_slides=(), max_units=160, known=()):
             continue
         text = _slide_text(slide)
         shapes = list(slide.shapes)
-        units = _visible_units(_slide_text(slide, body_only=True))
+        units = _visible_units(_slide_text(slide, body_only=True, exclude_diagrams=True))
         if units > max_units:
             warns.append(f"slide {idx}: dense body text ({units} visible units > {max_units}, banner/subtitle excluded); "
                          f"cut, split, or move it to the speech")

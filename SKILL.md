@@ -28,9 +28,10 @@ Not for: Beamer (`paper-slides`), posters (`paper-poster`), SVG-first decks (`pp
    p = deck.content("研究内容与方案", "研究内容一：……",
                     lead=[("标签：", "一句话"), ("标签：", "一句话", "red")], takeaway="本页结论一句话")
    left, right = p.body.split(2)
-   add_figure_panel(p.slide, left, "图题", draw_my_figure(*figure_slot(left)))   # figure drawn at slot size
+   inner = add_native_panel(p.slide, left, "方法流程", framed=True)        # editable native diagram first
+   add_flow_pipeline(p.slide, *inner.box, ["输入", "核心模块", "输出"], size_pt=16)
    add_card(p.slide, right, "要点", [[("• 判据：", C_BLUE), ("……", C_BLACK)]])
-   deck.save("deck.pptx")          # enforce 18 pt → staged save → audit (cover/TOC/thanks auto-skipped)
+   deck.save("deck.pptx")          # enforce sizes → staged save → audit (cover/TOC/thanks auto-skipped)
    ```
    Figures: `references/figures.md`.  Low-level traps: `references/pptx_pitfalls.md`.
 4. **Audit:** 0 issues.  Fix every warning or state why it stays; pass already-explained acronyms and product
@@ -44,7 +45,7 @@ Not for: Beamer (`paper-slides`), posters (`paper-poster`), SVG-first decks (`pp
 ## Contract (enforced by code)
 | Rule | Enforced by |
 |---|---|
-| Every run ≥ 18 pt, bold, 微软雅黑 (CJK) + Times New Roman (Latin), 4 font slots | `set_run_font`, `Deck.save`, audit |
+| Body runs ≥ 18 pt (native `Diagram:*` shapes ≥ 14 pt, prefer 16–18 pt), bold, 微软雅黑 + Times New Roman, 4 font slots | `set_run_font`, `Deck.save`, audit |
 | Colors: `#00337F` blue, `#C00000` red, black, white + `#EAF1FB` light-blue tint | `tju_theme`, audit (deck + `--images`) |
 | Content edges on the grid `0.45 … 12.88 in`, one gutter | `Region.split`, audit |
 | Image under a header bar is flush with it (same left/width, touching) | `add_figure_panel` / `add_image_card` aspect check (`fit="crop"` only for photos), audit |
@@ -53,10 +54,15 @@ Not for: Beamer (`paper-slides`), posters (`paper-poster`), SVG-first decks (`pp
 | Text fits its box at 18 pt | `add_card` / `add_image_card` / `add_table` → `LayoutError` |
 | No "承上启下" transition text; speaker notes are empty; no raw `x_k` math | audit |
 | Editable equations, hats via U+0302 | `tju_omml` |
-| Figures: slot size, palette, no tofu glyphs, no overlaps/crossings | `TjuDiagram.save` strict, audit `--images` |
+| Diagrams: native editable PPT shapes first (`tju_native_diagrams`, flat no-shadow connectors); raster figures only for photos/GIFs/paper excerpts/plots or truly non-box geometry | `tju_native_diagrams`, `TjuDiagram.save` strict, audit `--images` |
 | Speech ≈ 215 字/分 with ≥ 10 % slack | `tju_script_check.py` |
 
 ## Judgment rules (you check)
+- **Native diagrams first (`references/figures.md`)**: build every box-and-arrow diagram, flowchart, closed loop,
+  system architecture, mapping, timeline, or summary strip with editable native PPT shapes (`tju_native_diagrams` —
+  exported directly from `tjuppt`).  Never render ordinary boxes and arrows as a flat PNG/SVG image.  Reserve
+  raster images for real photos, GIFs, paper excerpts, Matplotlib plots, or rare geometric diagrams that native
+  rectangles and orthogonal connectors genuinely cannot express.
 - Define every term/acronym before use (`全称（ABBR）`); ≤ 3 new terms per page.
 - One message per page; body text far below what is spoken (audit warns > 160 units).
 - Every content page has a visual; ≤ 2–3 core formulas in the whole talk.
@@ -78,6 +84,7 @@ misalignment the advisor complained about.
 
 | Temptation | Do instead |
 |---|---|
+| "Draw a box-and-arrow flowchart / timeline / summary strip with `TjuDiagram` PNG because it's quick" | Build it with `tju_native_diagrams` (`add_native_panel`, `add_diagram_group`, `add_role_box`, `add_timeline`, `add_connector`) so every box is directly editable in PowerPoint |
 | "Make the takeaway 18 pt so it fits" | Cut the sentence to one line at 19 pt |
 | "`add_image_fit` is close enough under the header" | Redraw at `figure_slot()` size, or `fit="crop"` for photos |
 | "A dashed box around the cards looks tidy" | Drop it; the cards already have frames |

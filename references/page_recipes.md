@@ -33,42 +33,46 @@ y 7.05 └───────────────────────�
 
 | Need | Call | Notes |
 |---|---|---|
-| Figure under a title bar | `add_figure_panel(slide, region, "标题", png, tone, fit)` | draw at `figure_slot(region)`; `fit="crop"` for photos/GIFs |
+| Native diagram under a title bar | `add_native_panel(slide, region, "标题", tone, framed=True)` | **default for all block/flow diagrams**; returns inner `Region` |
+| Native grouped architecture / flow / timeline | `add_diagram_group`, `add_role_box`, `add_pill`, `add_junction_dot`, `add_flow_pipeline`, `add_feedback_loop`, `add_timeline`, `connect_boxes` | editable in PowerPoint (`≥ 14 pt`, prefer 16–18 pt; exported by `tjuppt`) |
+| Photo / GIF / plot under a title bar | `add_figure_panel(slide, region, "标题", png, tone, fit)` | for media & data plots only; `fit="crop"` for photos/GIFs |
 | Picture filling a region | `add_picture_exact(slide, png, region, fit)` | same aspect rule |
 | Header + text card | `add_card(slide, region, "标题", lines, tone)` | raises if text cannot fit at 18 pt |
 | Header + image + caption | `add_image_card(slide, region, "标题", png, caption, tone)` | image size `image_card_slot(region, n_lines)` |
 | Table | `add_table(slide, region, col_ratios, rows)` | row heights from wrapped text; raises if too tall |
 | Equation | `add_omml_equation(slide, *region.box, xml, jc="center", fill_color=C_BLUE_LIGHT, line_color=C_BLUE)` | |
-| Editable flow / mapping | `add_role_box`, `connect_boxes`, `add_flow_pipeline` (tju_native_diagrams) | |
 
 `tone="blue"` by default; `tone="red"` for at most one focal item per row.
 
 ## Opening-report recipes
 
 **背景** — `lead` = 2 lines (国家/战略需求, 行业需求与价值) · body `split(2)`: left real photo/GIF of the
-scene as a figure panel (`fit="crop"`), right a concept card (≤ 3 one-line definitions) or a scene schematic
-· `takeaway` = why this scene matters.
+scene as a figure panel (`fit="crop"`), right a concept card (≤ 3 one-line definitions) or a **native** scene
+workflow (`add_flow_pipeline` / `add_role_box`) · `takeaway` = why this scene matters.
 
-**关键挑战** — no lead · body `split(3)` → three `add_image_card`: short header (≤ 1 line), picture of the
-failure, 2-line caption (existing assumption → what breaks) · `takeaway` = what kind of method is needed.
-Aim ≤ 120 body characters.
+**关键挑战** — no lead · body `split(3)` → three columns: use `add_image_card` when showing real photos/GIFs of
+the failure, or `add_native_panel(..., framed=True)` + native vertical `add_flow_pipeline` + 2-line caption card
+when showing schematic causal chains · `takeaway` = what kind of method is needed.  Aim ≤ 120 body characters.
 
-**现状（一）方法演进** — a time × method-family figure filling `page.body` (`add_picture_exact`): classic
-rule/optimisation methods first, then learning, then the newest family that your work belongs to; mark
-where each family fails in your setting · `takeaway` = the gap.  This page answers "为什么不用传统方法".
+**现状（一）方法演进** — a **native editable** time × method-family timeline filling `page.body` (`add_timeline`
+or diagonal `add_connector` + `add_role_box` cards ≥ 14 pt): classic rule/optimisation methods first, then
+learning, then the newest family that your work belongs to; mark where each family fails in your setting ·
+`takeaway` = the gap.  This page answers "为什么不用传统方法".
 
 **现状（二）代表工作** — body `split(2)` then each `vsplit(2)` → four cards, each = original paper figure
 (cited `[n]`) + two one-line items `思路 / 局限`.
 
-**研究目标与总体框架** — `lead` = 1 line `研究目标：…` · body `split(2, [5, 7])`: left an explicit
-`挑战 → 研究内容` mapping (native boxes + connectors, editable), right a compact closed-loop/system figure
-panel marking reused vs new modules.
+**研究目标与总体框架** — `lead` = 1 line `研究目标：…` · prefer **one unified native editable architecture**
+spanning `page.body` (`add_diagram_group` + `add_role_box` + `add_pill` + `add_junction_dot` + orthogonal
+connectors, all text ≥ 16 pt, ≤ 3 restrained colors), or `split(2, [5, 7])` with native `挑战 → 研究内容`
+mapping on the left and a native closed-loop panel on the right.
 
 **研究内容 N (one page each)** — `lead` = 3 lines, one per sub-content: label starts with `研究`
 (`研究……方法：`), then one plain sentence; mark the key one red; no citations and no reuse disclaimers on
-research-content pages (citations belong on related-work pages) · body `split(2)` → two figure panels (method schematic + mechanism/flow or expected-result plot),
-or a panel + a card/equation column · `takeaway` = what this content delivers.  Subtitle begins with
-`研究内容一：`.  Never split one content over (上)/(下) pages.
+research-content pages (citations belong on related-work pages) · body `split(2)` → **native** method/flow
+panels (`add_native_panel`) for block diagrams, paired with real photos, Matplotlib curves (`add_figure_panel`),
+or a native equation (`add_omml_equation`) + bullet column · `takeaway` = what this content delivers.  Subtitle
+begins with `研究内容一：`.  Never split one content over (上)/(下) pages.
 
 **拟创新点** — 2 cards, header `创新点一：<短名>`, body `针对……问题，区别于已有的……，提出了……，有望……`
 in plain words (story.md S9), highlight the `提出了…` part · size the cards with `card_height()`

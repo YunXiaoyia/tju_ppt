@@ -31,9 +31,9 @@ from tju_components import add_dashed_box, add_text_block, no_theme_effects
 from tju_layout import Region
 from tju_text import append_rich_text, ensure_font_slots, normalize_paragraph, set_run_font, update_paragraph_text
 from tju_theme import (
-    BODY_BOTTOM, BODY_TOP, C_BLACK, C_BLUE, C_RED, C_WHITE, GRID_L, GRID_W, HEADER_RULE_Y, LEAD_LINE_H,
-    LEAD_TOP, MIN_PT, PT_BANNER, PT_BODY, PT_SUBTITLE, PT_TAKEAWAY, TAKEAWAY_H, TAKEAWAY_TOP, VGAP,
-    LayoutError, text_width_in,
+    BODY_BOTTOM, BODY_TOP, C_BLACK, C_BLUE, C_RED, C_WHITE, DIAGRAM_PREFIX, GRID_L, GRID_W, HEADER_RULE_Y,
+    LEAD_LINE_H, LEAD_TOP, MIN_DIAGRAM_PT, MIN_PT, PT_BANNER, PT_BODY, PT_SUBTITLE, PT_TAKEAWAY, TAKEAWAY_H,
+    TAKEAWAY_TOP, VGAP, LayoutError, text_width_in,
 )
 
 SKILL_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -277,11 +277,12 @@ def new_thanks_slide(prs, lines=("恳请各位老师批评指正", "谢谢！"),
 
 
 def enforce_min_18pt_all_slides(prs):
-    """Final guard: every text run, table cell, and OMML run >= 18 pt, bold, four font slots; clear notes."""
+    """Final guard: body runs >= 18 pt (native Diagram:* shapes >= 14 pt), bold, four font slots; clear notes."""
     from pptx.util import Pt as _Pt
     for slide in prs.slides:
         _clear_notes(slide)
         for sh in slide.shapes:
+            floor = MIN_DIAGRAM_PT if (sh.name or "").startswith(DIAGRAM_PREFIX) else MIN_PT
             frames = []
             if sh.has_text_frame:
                 frames.append(sh.text_frame)
@@ -290,8 +291,8 @@ def enforce_min_18pt_all_slides(prs):
             for tf in frames:
                 for p in tf.paragraphs:
                     for r in p.runs:
-                        if r.font.size is None or r.font.size.pt < MIN_PT:
-                            r.font.size = _Pt(MIN_PT)
+                        if r.font.size is None or r.font.size.pt < floor:
+                            r.font.size = _Pt(floor)
                         rPr = r._r.get_or_add_rPr()
                         rPr.set("b", "1")
                         ensure_font_slots(rPr)

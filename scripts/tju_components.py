@@ -65,12 +65,15 @@ def _one_line_check(text, width_in, pt, label):
 # Primitives
 # --------------------------------------------------------------------------- #
 def no_theme_effects(sp):
-    """Zero the <p:style> effect reference so autoshapes never inherit the theme's shadow."""
+    """Zero <p:style> effectRef and add empty <a:effectLst/> so shapes/connectors never inherit drop shadows."""
     style = sp._element.find(qn("p:style"))
     if style is not None:
         eff = style.find(qn("a:effectRef"))
         if eff is not None:
             eff.set("idx", "0")
+    spPr = sp._element.find(qn("p:spPr"))
+    if spPr is not None and spPr.find(qn("a:effectLst")) is None:
+        etree.SubElement(spPr, qn("a:effectLst"))
     return sp
 
 
@@ -97,10 +100,15 @@ def add_text_block(slide, left, top, width, height, lines, default_pt=PT_BODY, d
 
 def add_solid_box(slide, left, top, width, height, text_lines, fill_color=None, line_color=C_BLUE,
                   text_color=C_BLACK, size_pt=PT_BODY, align=PP_ALIGN.CENTER, line_width=1.5,
-                  margin_lr=0.07, margin_tb=0.04, line_spacing=1.08):
-    """Rectangle with explicit fill/border (never theme fallback) and rich text."""
-    sp = no_theme_effects(slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(left), Inches(top), Inches(width),
-                                                 Inches(height)))
+                  margin_lr=0.07, margin_tb=0.04, line_spacing=1.08, rounded=False, dashed=False,
+                  min_pt=MIN_PT, name=None, corner=0.10):
+    """Rectangle/rounded box with explicit fill/border (never theme fallback) and rich text."""
+    st = MSO_SHAPE.ROUNDED_RECTANGLE if rounded else MSO_SHAPE.RECTANGLE
+    sp = no_theme_effects(slide.shapes.add_shape(st, Inches(left), Inches(top), Inches(width), Inches(height)))
+    if rounded and len(sp.adjustments) > 0:
+        sp.adjustments[0] = corner
+    if name:
+        sp.name = name
     if fill_color is None:
         sp.fill.background()
     else:
@@ -111,14 +119,19 @@ def add_solid_box(slide, left, top, width, height, text_lines, fill_color=None, 
     else:
         sp.line.color.rgb = line_color
         sp.line.width = Pt(line_width)
+        if dashed:
+            ln = sp.line._get_or_add_ln()
+            etree.SubElement(ln, qn("a:prstDash")).set("val", "dash")
     _frame(sp.text_frame, margin_lr, margin_tb)
+    if text_lines is None:
+        return sp
     if isinstance(text_lines, (str, tuple)):
         text_lines = [text_lines]
     for i, item in enumerate(text_lines):
         p = sp.text_frame.paragraphs[0] if i == 0 else sp.text_frame.add_paragraph()
         p.alignment = align
         p.line_spacing = line_spacing
-        write_paragraph(p, item, size_pt, text_color)
+        write_paragraph(p, item, size_pt, text_color, min_pt=min_pt)
     return sp
 
 

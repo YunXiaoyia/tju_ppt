@@ -29,9 +29,9 @@ def ensure_font_slots(rPr):
         el.set("typeface", typeface)
 
 
-def set_run_font(run, size_pt=PT_BODY, bold=True, color=C_BLACK, italic=False, baseline=None):
-    """Four font slots (CJK 微软雅黑, Latin Times New Roman), bold, size >= 18 pt, optional baseline shift."""
-    run.font.size = Pt(max(MIN_PT, size_pt))
+def set_run_font(run, size_pt=PT_BODY, bold=True, color=C_BLACK, italic=False, baseline=None, min_pt=MIN_PT):
+    """Four font slots (CJK 微软雅黑, Latin Times New Roman), bold, size >= min_pt, optional baseline shift."""
+    run.font.size = Pt(max(min_pt, size_pt))
     is_bold = True if bold is None else bold
     run.font.bold = is_bold
     run.font.italic = italic
@@ -51,7 +51,7 @@ def set_run_font(run, size_pt=PT_BODY, bold=True, color=C_BLACK, italic=False, b
     ensure_font_slots(rPr)
 
 
-def append_rich_text(paragraph, text, size_pt=PT_BODY, color=C_BLACK, bold=True):
+def append_rich_text(paragraph, text, size_pt=PT_BODY, color=C_BLACK, bold=True, min_pt=MIN_PT):
     """Append `text` to a paragraph, converting _{sub}/^{sup} markup into real baseline-shifted runs."""
     for tok in SUB_SUP_PATTERN.split(text):
         if not tok:
@@ -59,13 +59,13 @@ def append_rich_text(paragraph, text, size_pt=PT_BODY, color=C_BLACK, bold=True)
         r = paragraph.add_run()
         if tok.startswith("_{") and tok.endswith("}"):
             r.text = tok[2:-1]
-            set_run_font(r, size_pt=size_pt, bold=bold, color=color, baseline=-25000)
+            set_run_font(r, size_pt=size_pt, bold=bold, color=color, baseline=-25000, min_pt=min_pt)
         elif tok.startswith("^{") and tok.endswith("}"):
             r.text = tok[2:-1]
-            set_run_font(r, size_pt=size_pt, bold=bold, color=color, baseline=30000)
+            set_run_font(r, size_pt=size_pt, bold=bold, color=color, baseline=30000, min_pt=min_pt)
         else:
             r.text = tok
-            set_run_font(r, size_pt=size_pt, bold=bold, color=color)
+            set_run_font(r, size_pt=size_pt, bold=bold, color=color, min_pt=min_pt)
 
 
 def normalize_paragraph(item, default_pt=PT_BODY, default_color=C_BLACK):
@@ -90,9 +90,9 @@ def paragraph_text(item):
     return "".join(s[0] for s in normalize_paragraph(item))
 
 
-def write_paragraph(paragraph, item, default_pt=PT_BODY, default_color=C_BLACK):
+def write_paragraph(paragraph, item, default_pt=PT_BODY, default_color=C_BLACK, min_pt=MIN_PT):
     for txt, col, pt, bold in normalize_paragraph(item, default_pt, default_color):
-        append_rich_text(paragraph, txt, size_pt=max(MIN_PT, pt), color=col, bold=bold)
+        append_rich_text(paragraph, txt, size_pt=max(min_pt, pt), color=col, bold=bold, min_pt=min_pt)
 
 
 def clear_runs(paragraph):

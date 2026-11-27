@@ -5,7 +5,8 @@
 
 ## 设计
 - **三层**：叙事（`references/story.md`）→ 页面配方（`references/page_recipes.md`）→ 代码构建（`scripts/tjuppt.py`）。
-- **坐标来自网格**：内容统一落在 `0.45–12.88 in`，左右分栏用 `Region.split()`，图框尺寸由 `figure_slot()` 给出，
+- **原生框图优先**：凡框图、流程图、系统架构、闭环图、时间轴与汇总条，默认用 `tju_native_diagrams`（`add_native_panel` / `add_diagram_group` / `add_role_box` / `add_timeline`）生成 PPT 原生可编辑形状（框内 ≥ 14 pt，正文 ≥ 18 pt），仅照片、动图、论文原图与 Matplotlib 数据图使用位图。
+- **坐标来自网格**：内容统一落在 `0.45–12.88 in`，左右分栏用 `Region.split()`，位图尺寸由 `figure_slot()` 给出，
   图按槽位 1:1 绘制后与标题栏齐边。
 - **放不下就报错**：引导句、红字结论、卡片、表格在生成时检查是否放得下（`LayoutError`），不缩字号。
 - **审计闭环**：`tju_audit.py`（字体/配色/网格/齐边/红字/重叠 + 内容告警）、`tju_render.py`（渲染 PNG）、

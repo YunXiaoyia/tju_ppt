@@ -16,8 +16,10 @@ from PIL import Image  # noqa: E402
 from pptx.enum.text import PP_ALIGN  # noqa: E402
 
 from tjuppt import (  # noqa: E402
-    C_BLUE, C_RED, C_WHITE, GRID_L, GRID_R, GUTTER, Deck, LayoutError, Region, add_card, add_dashed_box,
-    add_figure_panel, add_image_fit, add_solid_box, add_table, add_text_block, figure_slot,
+    C_BLACK, C_BLUE, C_BLUE_LIGHT, C_RED, C_WHITE, GRID_L, GRID_R, GUTTER, Deck, LayoutError, Region,
+    add_card, add_connector, add_dashed_box, add_diagram_group, add_diagram_label, add_figure_panel,
+    add_flow_pipeline, add_image_fit, add_junction_dot, add_native_panel, add_pill, add_role_box,
+    add_solid_box, add_table, add_text_block, add_timeline, connect_boxes, figure_slot,
 )
 from tju_audit import audit_content, audit_pptx  # noqa: E402
 
@@ -151,6 +153,48 @@ class FigureTests(unittest.TestCase):
             self.assertTrue(t._route_cjk("‖"))
         self.assertEqual(t.missing_glyphs("误差 ‖e‖"), [])
         self.assertTrue(t.missing_glyphs("\ue000"))
+
+
+    def test_native_diagrams_audit_clean_and_size_floors(self):
+        d = Deck()
+        p = d.content("研究内容与方案", "原生框图与分组架构验证")
+        left, right = p.body.split(2)
+        inner = add_native_panel(p.slide, left, "方法流程", framed=True)
+        add_flow_pipeline(p.slide, *inner.box, ["输入状态", "核心推断", "调度输出"], size_pt=16)
+        grp = add_diagram_group(p.slide, *right.box, title="核心模块", badge="一", pill="VLM", title_pt=16)
+        lbl_r, main_r = grp.take_bottom(0.32, gap=0.10)
+        a, b = main_r.split(2, gutter=0.35)
+        add_role_box(p.slide, *a.box, "子模块 A", role="input", size_pt=14)
+        add_role_box(p.slide, *b.box, "子模块 B", role="output", size_pt=14)
+        connect_boxes(p.slide, a, b)
+        add_junction_dot(p.slide, a.right + 0.17, a.y + a.h / 2)
+        add_diagram_label(p.slide, *lbl_r.box, "标注说明", pt=14, fill=C_WHITE)
+
+        p2 = d.content("国内外研究现状", "原生时间轴验证")
+        add_timeline(p2.slide, p2.body, [
+            ("2010", "规则方法", "静态前提", "plain"),
+            ("2020", "学习方法", "泛化受限", "input"),
+            ("2026", "融合方法", "本课题", "output"),
+        ], card_pt=14)
+
+        out = save(d, "native_ok.pptx")
+        self.assertEqual(audit_pptx(out), [])
+        # Verify Diagram:* 14 pt was preserved (not clamped to 18 pt) by enforce_min_18pt_all_slides
+        from pptx import Presentation
+        prs = Presentation(out)
+        sizes = {r.font.size.pt for sh in prs.slides[0].shapes if sh.name.startswith("Diagram:") and sh.has_text_frame
+                 for pa in sh.text_frame.paragraphs for r in pa.runs if r.text.strip() and r.font.size}
+        self.assertIn(14.0, sizes)
+        self.assertIn(16.0, sizes)
+
+        # Body text below 18 pt must still fail audit_pptx, and Diagram:* below 14 pt must fail audit_pptx
+        from pptx.util import Pt
+        sh_diag = next(sh for sh in prs.slides[0].shapes if sh.name.startswith("Diagram:") and sh.has_text_frame and sh.text_frame.text.strip())
+        sh_diag.text_frame.paragraphs[0].runs[0].font.size = Pt(12)
+        bad_p = os.path.join(TMP, "native_too_small.pptx")
+        prs.save(bad_p)
+        issues = audit_pptx(bad_p)
+        self.assertTrue(any("< 1400" in i for i in issues), issues)
 
 
 class ScriptCheckTests(unittest.TestCase):
